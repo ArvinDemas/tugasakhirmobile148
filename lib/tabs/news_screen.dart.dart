@@ -26,7 +26,8 @@ class _NewsScreenState extends State<NewsScreen> {
       "source": "Autosport",
       "date": "30 Oktober 2025",
       "imagePath": "assets/images/news_albon.png", // Ganti dengan asset Anda
-      
+      "url": "https://www.autosport.com",
+
       "content": "Alex Albon merasa optimis bahwa paket upgrade terbaru yang dibawa Williams Racing ke Grand Prix Miami akhir pekan ini akan memberikan peningkatan performa yang signifikan. Tim asal Grove tersebut berfokus pada perbaikan downforce di tikungan kecepatan rendah..." // Tambahkan teks lebih panjang jika perlu
     },
     {

@@ -10,6 +10,7 @@
  * - Memanggil _saveAddressToHive setiap kali alamat diubah (dari GPS/Manual/Peta).
  * - Memuat alamat dari Hive saat initState (dijaga oleh IndexedStack).
  * - Perbaikan error (shake, random, localeIdentifier, http import).
+ * - MENAMBAHKAN FUNGSI SEARCH BAR (SESUAI INSTRUKSI)
  */
 
 import 'dart:async'; // Untuk StreamSubscription (Shake)
@@ -35,7 +36,11 @@ class StoreScreen extends StatefulWidget {
 
   @override
   State<StoreScreen> createState() => _StoreScreenState();
+  
 }
+
+// Variabel search yang ada di file asli (baris 29-30) dihapus dari sini
+// dan dipindahkan ke dalam _StoreScreenState sesuai Instruksi 1.
 
 class _StoreScreenState extends State<StoreScreen> {
   // --- STATE UNTUK LOKASI ---
@@ -61,6 +66,10 @@ class _StoreScreenState extends State<StoreScreen> {
   String _selectedCurrency = 'IDR';
   final List<String> _targetCurrencies = ['IDR', 'USD', 'EUR', 'AUD'];
 
+  // --- INSTRUKSI 1: Tambahkan state untuk search ---
+  String _searchQuery = "";
+  final TextEditingController _searchController = TextEditingController();
+  
   // --- DATA PRODUK STATIS ---
   final List<Map<String, dynamic>> _products = [
     { "id": 1, "name": "Williams Racing 2025 Team Polo", "imagePath": "assets/images/product_polo.png", "priceGBP": 65.00 },
@@ -83,6 +92,7 @@ class _StoreScreenState extends State<StoreScreen> {
   void dispose() {
     _shakeDetector?.stopListening();
     _manualAddressController.dispose(); // Dispose controller
+    _searchController.dispose(); // DARI INSTRUKSI 2
     super.dispose();
   }
 
@@ -90,26 +100,26 @@ class _StoreScreenState extends State<StoreScreen> {
 
   // --- Muat alamat terakhir yang tersimpan di Hive ---
   Future<void> _loadAddressFromHive() async {
-     try {
-       final userBox = Hive.box('users');
-       final currentUserEmail = userBox.get('currentUserEmail');
-       if (currentUserEmail != null) {
+      try {
+        final userBox = Hive.box('users');
+        final currentUserEmail = userBox.get('currentUserEmail');
+        if (currentUserEmail != null) {
           final userData = userBox.get(currentUserEmail) as Map?;
           if (userData != null && userData.containsKey('address') && userData['address'] != null) {
-             if (mounted) {
+              if (mounted) {
                 setState(() {
                   _currentAddress = userData['address'];
                 });
-                print("[StoreScreen] Alamat dimuat dari Hive: $_currentAddress");
-             }
+              }
+              print("[StoreScreen] Alamat dimuat dari Hive: $_currentAddress");
           } else {
-             print("[StoreScreen] Alamat di Hive kosong, pakai default.");
-             if (mounted) setState(() => _currentAddress = _defaultAddressMessage);
+              print("[StoreScreen] Alamat di Hive kosong, pakai default.");
+              if (mounted) setState(() => _currentAddress = _defaultAddressMessage);
           }
-       }
-     } catch (e) {
-       print("[StoreScreen] Gagal memuat alamat dari Hive: $e");
-     }
+        }
+      } catch (e) {
+        print("[StoreScreen] Gagal memuat alamat dari Hive: $e");
+      }
   }
 
   // --- BARU: Dialog untuk memilih sumber lokasi (dengan opsi Peta) ---
@@ -132,38 +142,38 @@ class _StoreScreenState extends State<StoreScreen> {
               leading: Icon(Icons.edit_location_outlined, color: Theme.of(context).colorScheme.primary),
               title: const Text('Masukkan Alamat Manual'),
               onTap: () {
-                 Navigator.pop(ctx); // Tutup bottom sheet
+                  Navigator.pop(ctx); // Tutup bottom sheet
                 _showManualAddressDialog(); // Panggil dialog input manual
               },
             ),
-             // --- BARU: Opsi Pilih dari Peta ---
-             ListTile(
-               leading: Icon(Icons.map_outlined, color: Theme.of(context).colorScheme.primary),
-               title: const Text('Pilih dari Peta'),
-               onTap: () async { // Jadikan async
-                 Navigator.pop(ctx); // Tutup bottom sheet
-                 // Buka halaman peta dan tunggu hasilnya (LatLng)
-                 final result = await Navigator.pushNamed(context, '/map-picker');
-                 
-                 // Jika pengguna memilih lokasi dan kembali
-                 if (result != null && result is LatLng) {
+              // --- BARU: Opsi Pilih dari Peta ---
+              ListTile(
+                leading: Icon(Icons.map_outlined, color: Theme.of(context).colorScheme.primary),
+                title: const Text('Pilih dari Peta'),
+                onTap: () async { // Jadikan async
+                  Navigator.pop(ctx); // Tutup bottom sheet
+                  // Buka halaman peta dan tunggu hasilnya (LatLng)
+                  final result = await Navigator.pushNamed(context, '/map-picker');
+                  
+                  // Jika pengguna memilih lokasi dan kembali
+                  if (result != null && result is LatLng) {
                     print("[StoreScreen] Menerima LatLng dari Peta: $result");
                     // Ubah LatLng menjadi Position (dummy) untuk _getAddressFromLatLng
                     final Position mapPosition = Position(
-                       latitude: result.latitude,
-                       longitude: result.longitude,
-                       timestamp: DateTime.now(),
-                       accuracy: 100.0, altitude: 0, altitudeAccuracy: 0,
-                       heading: 0, headingAccuracy: 0, speed: 0, speedAccuracy: 0
+                        latitude: result.latitude,
+                        longitude: result.longitude,
+                        timestamp: DateTime.now(),
+                        accuracy: 100.0, altitude: 0, altitudeAccuracy: 0,
+                        heading: 0, headingAccuracy: 0, speed: 0, speedAccuracy: 0
                     );
                     // Panggil fungsi reverse geocoding
                     _getAddressFromLatLng(mapPosition);
-                 } else {
+                  } else {
                     print("[StoreScreen] Pemilihan peta dibatalkan atau data tidak valid.");
-                 }
-               },
-             ),
-             ListTile(
+                  }
+                },
+              ),
+              ListTile(
               leading: Icon(Icons.cancel_outlined, color: Theme.of(context).colorScheme.outline.withOpacity(0.7)),
               title: const Text('Batal'),
               onTap: () => Navigator.pop(ctx), // Tutup bottom sheet
@@ -177,9 +187,9 @@ class _StoreScreenState extends State<StoreScreen> {
   // --- BARU: Dialog untuk input alamat manual ---
   void _showManualAddressDialog() {
     if (_currentAddress != _defaultAddressMessage) {
-       _manualAddressController.text = _currentAddress;
+        _manualAddressController.text = _currentAddress;
     } else {
-       _manualAddressController.text = "";
+        _manualAddressController.text = "";
     }
 
     showDialog(
@@ -224,12 +234,12 @@ class _StoreScreenState extends State<StoreScreen> {
   // --- BARU: Fungsi helper untuk menyimpan alamat ke Hive ---
   // (Ini adalah kunci agar alamat tidak hilang)
   Future<void> _saveAddressToHive(String address) async {
-     if (address.isEmpty) return; 
+      if (address.isEmpty) return; 
 
-     try {
-       final userBox = Hive.box('users');
-       final currentUserEmail = userBox.get('currentUserEmail');
-       if (currentUserEmail != null) {
+      try {
+        final userBox = Hive.box('users');
+        final currentUserEmail = userBox.get('currentUserEmail');
+        if (currentUserEmail != null) {
           final userData = Map<dynamic, dynamic>.from(userBox.get(currentUserEmail) ?? {});
           userData['address'] = address; // Tambah/update field alamat
           await userBox.put(currentUserEmail, userData); // Simpan kembali
@@ -241,19 +251,19 @@ class _StoreScreenState extends State<StoreScreen> {
             });
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Alamat berhasil disimpan!'), backgroundColor: Colors.green));
           }
-       } else {
+        } else {
           throw Exception("User tidak login, tidak bisa simpan alamat.");
-       }
-     } catch (e) {
-       print("[StoreScreen] Gagal simpan alamat ke Hive: $e");
-       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal menyimpan alamat: $e'), backgroundColor: Colors.redAccent));
-     }
+        }
+      } catch (e) {
+        print("[StoreScreen] Gagal simpan alamat ke Hive: $e");
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal menyimpan alamat: $e'), backgroundColor: Colors.redAccent));
+      }
   }
 
 
   /**
-   * Meminta izin lokasi dan mengambil posisi saat ini (Otomatis).
-   */
+    * Meminta izin lokasi dan mengambil posisi saat ini (Otomatis).
+    */
   Future<void> _determinePosition() async {
     if (_isFetchingLocation) return;
     if (mounted) setState(() => _isFetchingLocation = true);
@@ -282,17 +292,17 @@ class _StoreScreenState extends State<StoreScreen> {
     } catch (e) {
       print("[StoreScreen] Error mendapatkan lokasi: $e");
       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.redAccent));
-         setState(() => _isFetchingLocation = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.redAccent));
+          setState(() => _isFetchingLocation = false);
       }
     }
     // Hentikan loading dipindahkan ke _getAddressFromLatLng
   }
 
   /**
-   * Mengubah koordinat (Lat/Lng) menjadi alamat jalan.
-   * --- UPDATE: Memanggil _saveAddressToHive ---
-   */
+    * Mengubah koordinat (Lat/Lng) menjadi alamat jalan.
+    * --- UPDATE: Memanggil _saveAddressToHive ---
+    */
   Future<void> _getAddressFromLatLng(Position position) async {
     try {
       // Hapus parameter locale/localeIdentifier
@@ -308,29 +318,29 @@ class _StoreScreenState extends State<StoreScreen> {
         print("[StoreScreen] Alamat didapat: $address");
         
         if (address.isNotEmpty) {
-           // --- PENTING: Simpan ke Hive setiap kali alamat didapat ---
-           await _saveAddressToHive(address);
+            // --- PENTING: Simpan ke Hive setiap kali alamat didapat ---
+            await _saveAddressToHive(address);
         } else {
-           if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak dapat menemukan alamat dari lokasi Anda.')));
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak dapat menemukan alamat dari lokasi Anda.')));
         }
       } else {
-         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak dapat menemukan alamat.')));
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tidak dapat menemukan alamat.')));
       }
     } catch (e) {
       print("[StoreScreen] Error konversi alamat: $e");
-       if (mounted) {
-         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal konversi alamat: $e'), backgroundColor: Colors.redAccent));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal konversi alamat: $e'), backgroundColor: Colors.redAccent));
       }
     } finally {
-       // Pastikan loading dihentikan di sini
-       if (mounted) setState(() => _isFetchingLocation = false);
+        // Pastikan loading dihentikan di sini
+        if (mounted) setState(() => _isFetchingLocation = false);
     }
   }
 
 
   // --- 2. LOGIKA GAME SHAKE (Sama) ---
   void _initializeShakeGame() {
-     _shakeDetector = ShakeDetector.autoStart(
+      _shakeDetector = ShakeDetector.autoStart(
       onPhoneShake: (ShakeEvent event) { 
         if (!_eggBroken && mounted) {
           setState(() => _shakeCount++);
@@ -354,22 +364,22 @@ class _StoreScreenState extends State<StoreScreen> {
   }
   void _showReferralDialog(String code) {
     showDialog( context: context, barrierDismissible: false, builder: (context) => AlertDialog(
-         title: const Text('Selamat!', textAlign: TextAlign.center),
+        title: const Text('Selamat!', textAlign: TextAlign.center),
         content: Column( mainAxisSize: MainAxisSize.min, children: [
-            Text('Kamu memecahkan telur! Ini kode diskon untukmu:', textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8))),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surfaceVariant,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Theme.of(context).colorScheme.primary, width: 1),
-              ),
-              child: Text( code, style: TextStyle( color: Theme.of(context).colorScheme.primary, fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 2)),
+          Text('Kamu memecahkan telur! Ini kode diskon untukmu:', textAlign: TextAlign.center, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8))),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceVariant,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Theme.of(context).colorScheme.primary, width: 1),
             ),
-            const SizedBox(height: 16),
-            const Text('(Kode ini hanya contoh)', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey)),
-          ],),
+            child: Text( code, style: TextStyle( color: Theme.of(context).colorScheme.primary, fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 2)),
+          ),
+          const SizedBox(height: 16),
+          const Text('(Kode ini hanya contoh)', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey)),
+        ],),
         actions: [ TextButton( onPressed: () => Navigator.pop(context), child: const Text('Tutup'))],
       ),
     );
@@ -377,6 +387,7 @@ class _StoreScreenState extends State<StoreScreen> {
 
 
   // --- UI BUILD METHOD ---
+  // --- SESUAI INSTRUKSI 6: Update build method ---
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -391,7 +402,9 @@ class _StoreScreenState extends State<StoreScreen> {
           _buildLocationHeader(theme),
           const SizedBox(height: 24),
           _buildEggGame(theme),
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
+          _buildSearchBar(theme), // TAMBAHKAN INI
+          const SizedBox(height: 16),
           _buildStoreSection(theme),
         ],
       ),
@@ -401,71 +414,133 @@ class _StoreScreenState extends State<StoreScreen> {
   // --- WIDGET HELPER ---
 
   /**
-   * Membangun bagian Header (Tombol Lokasi + Gambar Placeholder).
-   * --- UPDATE: IconButton memanggil _showLocationOptions ---
-   */
+    * Membangun bagian Header (Tombol Lokasi + Gambar Placeholder).
+    * --- SESUAI INSTRUKSI 3: Ganti fungsi _buildLocationHeader ---
+    */
   Widget _buildLocationHeader(ThemeData theme) {
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16.0, 12.0, 8.0, 8.0),
+    return Column(
+      children: [
+        // BAGIAN 1: LOKASI (TANPA GAMBAR)
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
             child: Row(
               children: [
-                Icon(Icons.location_on_outlined, color: theme.colorScheme.primary, size: 20),
+                Icon(Icons.location_on_outlined, color: theme.colorScheme.primary, size: 22),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                       Text('Alamat Pengiriman:', style: TextStyle(fontSize: 12, color: theme.colorScheme.outline)),
-                       Text(
-                         _currentAddress, // Tampilkan alamat dari state
-                         style: TextStyle(
-                            fontSize: 13,
-                            // --- UPDATE: Beri warna oranye jika alamat masih default ---
-                            color: _currentAddress == _defaultAddressMessage ? Colors.orangeAccent[100] : Colors.white,
-                            fontWeight: FontWeight.w500,
-                            fontStyle: _currentAddress == _defaultAddressMessage ? FontStyle.italic : FontStyle.normal,
-                         ),
-                         maxLines: 2, overflow: TextOverflow.ellipsis,
-                       ),
+                      Text(
+                        'Alamat Pengiriman:',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.outline,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _currentAddress,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: _currentAddress == _defaultAddressMessage
+                              ? Colors.orangeAccent[100]
+                              : theme.colorScheme.onSurface,
+                          fontWeight: FontWeight.w500,
+                          fontStyle: _currentAddress == _defaultAddressMessage
+                              ? FontStyle.italic
+                              : FontStyle.normal,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Tombol/Icon untuk update lokasi
                 IconButton(
                   icon: _isFetchingLocation
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      // --- UPDATE: Ikon ganti jadi 'edit_location' agar lebih jelas ---
-                      : Icon(Icons.edit_location_outlined, color: theme.colorScheme.onSurface.withOpacity(0.7)),
-                  // --- UPDATE: Panggil dialog pilihan ---
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          Icons.edit_location_outlined,
+                          color: theme.colorScheme.primary,
+                        ),
                   onPressed: _isFetchingLocation ? null : _showLocationOptions,
-                  tooltip: 'Ubah Alamat Pengiriman', // Tooltip diubah
-                )
+                  tooltip: 'Ubah Alamat Pengiriman',
+                ),
               ],
             ),
           ),
-          const Divider(height: 1, thickness: 0.5),
-          Image.asset(
-            'assets/images/williams_carousel_1.png',
-            height: 150, width: double.infinity, fit: BoxFit.cover,
-            errorBuilder: (context, error, stack) => Container(
-              height: 150, color: theme.colorScheme.surfaceVariant,
-              child: const Center(child: Icon(Icons.image_not_supported, color: Colors.grey)),
+        ),
+        
+        const SizedBox(height: 12),
+        
+        // BAGIAN 2: GAMBAR BANNER (TERPISAH)
+        Card(
+          clipBehavior: Clip.antiAlias,
+          margin: EdgeInsets.zero,
+          child: AspectRatio(
+            aspectRatio: 16 / 9, // Rasio 16:9 agar tidak terpotong
+            child: Image.asset(
+              'assets/images/williams_carousel_1.png',
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stack) => Container(
+                color: theme.colorScheme.surfaceContainerHigh,
+                child: const Center(
+                  child: Icon(Icons.image_not_supported, color: Colors.grey, size: 40),
+                ),
+              ),
             ),
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+
+  // --- SESUAI INSTRUKSI 4: Tambahkan widget untuk Search Bar ---
+  Widget _buildSearchBar(ThemeData theme) {
+    return Card(
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: 'Cari produk Williams Racing...',
+          prefixIcon: Icon(Icons.search, color: theme.colorScheme.primary),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    setState(() {
+                      _searchController.clear();
+                      _searchQuery = "";
+                    });
+                  },
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+        onChanged: (value) {
+          setState(() {
+            _searchQuery = value.toLowerCase();
+          });
+        },
       ),
     );
   }
 
+
+  
+
   /**
-   * Membangun bagian Gamifikasi "Pecah Telur". (Sama)
-   */
+    * Membangun bagian Gamifikasi "Pecah Telur". (Sama)
+    */
   Widget _buildEggGame(ThemeData theme) {
     double progress = _shakeCount / _shakesToBreak;
     progress = progress.clamp(0.0, 1.0);
@@ -480,12 +555,12 @@ class _StoreScreenState extends State<StoreScreen> {
               height: 100,
               child: Center(
                 child: _eggBroken
-                  ? Column( mainAxisSize: MainAxisSize.min, children: [
-                       Text('Kode Referral Anda:', style: TextStyle(color: theme.colorScheme.outline)),
-                       const SizedBox(height: 8),
-                       Text(_referralCode, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.primary, letterSpacing: 1.5)),
-                     ])
-                  : Icon(Icons.egg_alt_outlined, size: 60 + (progress * 20), color: theme.colorScheme.primary.withOpacity(0.5 + (progress * 0.5))),
+                    ? Column( mainAxisSize: MainAxisSize.min, children: [
+                        Text('Kode Referral Anda:', style: TextStyle(color: theme.colorScheme.outline)),
+                        const SizedBox(height: 8),
+                        Text(_referralCode, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.primary, letterSpacing: 1.5)),
+                      ])
+                    : Icon(Icons.egg_alt_outlined, size: 60 + (progress * 20), color: theme.colorScheme.primary.withOpacity(0.5 + (progress * 0.5))),
               ),
             ),
             const SizedBox(height: 16),
@@ -494,7 +569,7 @@ class _StoreScreenState extends State<StoreScreen> {
                 value: progress, minHeight: 8, borderRadius: BorderRadius.circular(4),
                 backgroundColor: theme.colorScheme.surfaceVariant, color: theme.colorScheme.primary,
               ),
-             if (!_eggBroken)
+              if (!_eggBroken)
                 Padding(
                   padding: const EdgeInsets.only(top: 8.0),
                   child: Text('${(_shakeCount / _shakesToBreak * 100).toInt()}%', style: TextStyle(color: theme.colorScheme.outline, fontSize: 12)),
@@ -506,8 +581,9 @@ class _StoreScreenState extends State<StoreScreen> {
   }
 
   /**
-   * Membangun bagian Toko (Dropdown Konversi + Daftar Produk). (Sama)
-   */
+    * Membangun bagian Toko (Dropdown Konversi + Daftar Produk).
+    * --- SESUAI INSTRUKSI 5: Update fungsi _buildStoreSection ---
+    */
   Widget _buildStoreSection(ThemeData theme) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -516,44 +592,121 @@ class _StoreScreenState extends State<StoreScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-             Text('Williams Store', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w500)),
-             Container(
-               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-               height: 40,
-               decoration: BoxDecoration( color: theme.colorScheme.surfaceVariant, borderRadius: BorderRadius.circular(8)),
-               child: Theme(
-                 data: theme.copyWith( canvasColor: theme.colorScheme.surface),
-                 child: DropdownButtonHideUnderline(
-                   child: DropdownButton<String>(
-                      value: _selectedCurrency,
-                      items: _targetCurrencies.map((String currency) => DropdownMenuItem<String>(value: currency, child: Text(currency, style: const TextStyle(fontWeight: FontWeight.w500)))).toList(),
-                      onChanged: (String? newValue) { if (newValue != null) setState(() => _selectedCurrency = newValue); },
-                      iconEnabledColor: theme.colorScheme.primary,
-                      style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
-                   ),
-                 ),
-               ),
-             ),
+            Text(
+              'Williams Store',
+              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+              height: 40,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Theme(
+                data: theme.copyWith(canvasColor: theme.colorScheme.surface),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedCurrency,
+                    items: _targetCurrencies
+                        .map((String currency) => DropdownMenuItem<String>(
+                              value: currency,
+                              child: Text(
+                                currency,
+                                style: const TextStyle(fontWeight: FontWeight.w500),
+                              ),
+                            ))
+                        .toList(),
+                    onChanged: (String? newValue) {
+                      if (newValue != null) setState(() => _selectedCurrency = newValue);
+                    },
+                    iconEnabledColor: theme.colorScheme.primary,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: theme.colorScheme.onSurface),
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
         FutureBuilder<Map<String, dynamic>>(
           future: _ratesFuture,
           builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: Padding(padding: EdgeInsets.all(32.0), child: CircularProgressIndicator()));
-            if (snapshot.hasError) return Center(child: Padding(padding: const EdgeInsets.all(16.0), child: Text('Gagal memuat kurs mata uang: ${snapshot.error}', style: const TextStyle(color: Colors.orangeAccent), textAlign: TextAlign.center)));
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32.0),
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    'Gagal memuat kurs mata uang: ${snapshot.error}',
+                    style: const TextStyle(color: Colors.orangeAccent),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            }
             if (snapshot.hasData) {
               final Map<String, dynamic> rates = snapshot.data!;
-              if (!rates.containsKey(_selectedCurrency)) return Center(child: Text('Mata uang $_selectedCurrency tidak ditemukan di API.'));
-              
+              if (!rates.containsKey(_selectedCurrency)) {
+                return Center(
+                  child: Text('Mata uang $_selectedCurrency tidak ditemukan di API.'),
+                );
+              }
+
+              // FILTER PRODUK BERDASARKAN SEARCH
+              final filteredProducts = _products.where((product) {
+                if (_searchQuery.isEmpty) return true;
+                final name = (product['name'] as String).toLowerCase();
+                return name.contains(_searchQuery);
+              }).toList();
+
+              if (filteredProducts.isEmpty) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32.0),
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.search_off,
+                          size: 64,
+                          color: theme.colorScheme.outline,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Produk tidak ditemukan',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Coba kata kunci lain',
+                          style: TextStyle(color: theme.colorScheme.outline),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
               return ListView.builder(
-                 itemCount: _products.length,
-                 shrinkWrap: true,
-                 physics: const NeverScrollableScrollPhysics(),
-                 itemBuilder: (context, index) {
-                    final product = _products[index];
-                    return _buildProductCard( theme: theme, product: product, rates: rates);
-                 },
+                itemCount: filteredProducts.length,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemBuilder: (context, index) {
+                  final product = filteredProducts[index];
+                  return _buildProductCard(
+                    theme: theme,
+                    product: product,
+                    rates: rates,
+                  );
+                },
               );
             }
             return const Center(child: Text('Memuat data toko...'));
@@ -769,4 +922,3 @@ Widget _buildProductCard({
   
 
 } // Akhir Class _StoreScreenState
-

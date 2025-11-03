@@ -5,16 +5,35 @@
  */
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-
-class NewsDetailScreen extends StatelessWidget {
+class NewsDetailScreen extends StatefulWidget {
   const NewsDetailScreen({super.key});
 
-  // --- 1. FUNGSI UNTUK MEMBUKA URL ---
-  /**
-   * Fungsi helper untuk meluncurkan URL di browser eksternal.
-   */
+  @override
+  State<NewsDetailScreen> createState() => _NewsDetailScreenState();
+}
 
+class _NewsDetailScreenState extends State<NewsDetailScreen> {
+  // --- 1. FUNGSI UNTUK MEMBUKA URL ---
+  Future<void> _launchURL(String urlString) async {
+    try {
+      final Uri url = Uri.parse(urlString);
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        throw Exception('Could not launch $urlString');
+      }
+    } catch (e) {
+      print('[NewsDetail] Error launching URL: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal membuka link: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +58,7 @@ class NewsDetailScreen extends StatelessWidget {
         article['imagePath'] ?? 'assets/images/placeholder.png';
     final String source = article['source'] ?? 'Tidak diketahui';
     final String date = article['date'] ?? '';
-    
+    final String? url = article['url'];
     final String content = article['content'] ??
         'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. '
         'Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. \n\n'
@@ -141,7 +160,30 @@ class NewsDetailScreen extends StatelessWidget {
         ],
       ),
 
-      
+      // --- Tombol Baca Artikel Lengkap ---
+      bottomNavigationBar: url != null
+          ? Container(
+              padding: const EdgeInsets.all(16.0),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: ElevatedButton.icon(
+                onPressed: () => _launchURL(url),
+                icon: const Icon(Icons.open_in_browser),
+                label: const Text('Baca Artikel Lengkap'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+            )
+          : null,
     );
   }
 }

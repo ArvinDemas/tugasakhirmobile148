@@ -1,13 +1,12 @@
 /**
  * File: profile_screen.dart
- * Deskripsi: Halaman profile dengan Side Navigation Drawer.
- * Fitur: Edit profile, Riwayat, Bookmark, Test Notif, Kesan & Pesan, Logout.
- * 
- * UPDATE:
- * - Menambahkan Drawer dengan menu navigasi.
- * - Menambahkan halaman Bookmark untuk produk favorit.
- * - Menambahkan halaman Feedback (Kesan & Pesan).
- * - Integrasi NotificationService untuk test notifikasi.
+ * Deskripsi: Halaman untuk "Edit Profile".
+ * * UPDATE:
+ * - Ini BUKAN lagi halaman tab. Ini adalah halaman yang di-push (dibuka)
+ * dari Drawer di main_screen.dart.
+ * - Menghapus semua logika Drawer, AppBar kustom, dan notifikasi
+ * (sudah pindah ke main_screen.dart).
+ * - Hanya berisi logika untuk mengedit profil (nama, tgl lahir, foto).
  */
 
 import 'dart:io';
@@ -17,7 +16,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:intl/intl.dart';
-import '../../services/notification_service.dart'; // Import NotificationService
+// Import NotificationService DIHAPUS, karena sudah pindah ke MainScreen
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -29,7 +28,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
-  final NotificationService _notificationService = NotificationService(); // Instance NotificationService
 
   String? _currentUserEmail;
   String _username = "Pengguna";
@@ -40,7 +38,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeNotifications(); // Inisialisasi notifikasi
     _loadUserProfile();
   }
   
@@ -50,18 +47,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  // --- Inisialisasi Notifikasi ---
-  Future<void> _initializeNotifications() async {
-    try {
-      await _notificationService.initialize();
-      await _notificationService.requestPermissions();
-      print('[ProfileScreen] Notification service initialized');
-    } catch (e) {
-      print('[ProfileScreen] Error initializing notifications: $e');
-    }
-  }
-
-  // --- Load User Profile (Sama seperti sebelumnya) ---
+  // --- Load User Profile (Tetap ada, diperlukan untuk halaman ini) ---
   Future<void> _loadUserProfile() async {
     if (mounted) setState(() => _isLoading = true);
     try {
@@ -96,7 +82,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- Update User Data (Sama) ---
+  // --- Update User Data (Tetap ada) ---
   Future<void> _updateUserData(String key, dynamic value) async {
     if (_currentUserEmail == null) return;
     try {
@@ -104,7 +90,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final Map<dynamic, dynamic> userData = Map.from(userBox.get(_currentUserEmail) ?? {});
       userData[key] = value;
       await userBox.put(_currentUserEmail!, userData);
-      _loadUserProfile();
+      _loadUserProfile(); // Muat ulang data untuk tampilan
     } catch (e) {
       print("[ProfileScreen] Error updating user data: $e");
       if (mounted) {
@@ -115,7 +101,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- Dialog Edit Username (Sama) ---
+  // --- Dialog Edit Username (Tetap ada) ---
   void _showEditUsernameDialog() {
     _usernameController.text = _username;
     showDialog(
@@ -151,7 +137,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- Date Picker (Sama) ---
+  // --- Date Picker (Tetap ada) ---
   Future<void> _selectDateOfBirth() async {
     final DateTime firstDate = DateTime.now().subtract(const Duration(days: 365 * 100));
     final DateTime lastDate = DateTime.now();
@@ -168,7 +154,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- Image Picker (Sama) ---
+  // --- Image Picker (Tetap ada) ---
   Future<void> _pickImage() async {
      final ImagePicker picker = ImagePicker();
     final XFile? image = await showModalBottomSheet<XFile?>(
@@ -206,53 +192,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- Logout (Sama) ---
-   Future<void> _logout() async {
-      try {
-         final userBox = Hive.box('users');
-         await userBox.delete('currentUserEmail');
-         if (mounted) {
-            Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-         }
-      } catch (e) {
-         print("[ProfileScreen] Error logout: $e");
-         if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Gagal logout: $e'), backgroundColor: Colors.redAccent)
-            );
-         }
-      }
-   }
-
-  // --- BARU: Test Notifikasi Instant ---
-  Future<void> _testInstantNotification() async {
-    await _notificationService.showInstantNotification(
-      id: 999,
-      title: '🏁 Test Notifikasi',
-      body: 'Ini adalah notifikasi test dari Williams Racing App!',
-      payload: 'test',
-    );
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Notifikasi instant dikirim!'), backgroundColor: Colors.green)
-      );
-    }
-  }
-
-  // --- BARU: Test Notifikasi Delayed (5 detik) ---
-  Future<void> _testDelayedNotification() async {
-    await _notificationService.scheduleStorePromotion();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Notifikasi promosi store dijadwalkan dalam 5 detik!'),
-          backgroundColor: Colors.green,
-        )
-      );
-    }
-  }
-
-  // --- UI BUILD METHOD (dengan Drawer) ---
+  // --- UI BUILD METHOD (TANPA DRAWER) ---
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -262,137 +202,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final theme = Theme.of(context);
     bool profileImageExists = _profileImagePath != null && File(_profileImagePath!).existsSync();
 
+    // Halaman ini sekarang punya Scaffold sendiri (karena di-push)
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profil Saya'),
+        title: const Text('Edit Profile'),
         centerTitle: true,
-        // Leading icon untuk membuka drawer
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
-        ),
-      ),
-      // --- DRAWER MENU ---
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            // Drawer Header dengan info user
-            DrawerHeader(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    theme.colorScheme.primary,
-                    theme.colorScheme.primary.withOpacity(0.7),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  CircleAvatar(
-                    radius: 35,
-                    backgroundColor: Colors.white,
-                    backgroundImage: profileImageExists
-                        ? FileImage(File(_profileImagePath!)) as ImageProvider
-                        : null,
-                    child: !profileImageExists
-                        ? const Icon(Icons.person, size: 40, color: Colors.grey)
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _username,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    _currentUserEmail ?? '',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            
-            // Menu: Profile
-            ListTile(
-              leading: Icon(Icons.person_outline, color: theme.colorScheme.primary),
-              title: const Text('Edit Profile'),
-              onTap: () {
-                Navigator.pop(context); // Tutup drawer
-                // Tetap di halaman profile (tidak perlu navigasi)
-              },
-            ),
-            
-            // Menu: Riwayat Pesanan
-            ListTile(
-              leading: Icon(Icons.receipt_long_outlined, color: theme.colorScheme.primary),
-              title: const Text('Riwayat Pesanan'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/order-history');
-              },
-            ),
-            
-            // Menu: Bookmark (Favorit Produk)
-            ListTile(
-              leading: Icon(Icons.bookmark_outline, color: theme.colorScheme.primary),
-              title: const Text('Produk Favorit'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/bookmark');
-              },
-            ),
-            
-            const Divider(),
-            
-            // Menu: Test Notifikasi
-            ListTile(
-              leading: Icon(Icons.notifications_active_outlined, color: theme.colorScheme.primary),
-              title: const Text('Test Notifikasi'),
-              onTap: () {
-                Navigator.pop(context);
-                _showNotificationTestDialog();
-              },
-            ),
-            
-            // Menu: Kesan & Pesan
-            ListTile(
-              leading: Icon(Icons.feedback_outlined, color: theme.colorScheme.primary),
-              title: const Text('Kesan & Pesan'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/feedback');
-              },
-            ),
-            
-            const Divider(),
-            
-            // Menu: Logout
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.redAccent),
-              title: const Text('Keluar Akun', style: TextStyle(color: Colors.redAccent)),
-              onTap: () {
-                Navigator.pop(context);
-                _logout();
-              },
-            ),
-          ],
-        ),
       ),
       
-      // --- BODY: Konten Profile Utama ---
+      // --- BODY: Konten Profile Utama (Tetap sama) ---
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -453,78 +270,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                label: 'Email',
                value: _currentUserEmail ?? 'Tidak tersedia',
              ),
-             
-            const SizedBox(height: 24),
-            
-            // Hint untuk membuka drawer
-            Card(
-              color: theme.colorScheme.surfaceVariant.withOpacity(0.5),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: theme.colorScheme.primary, size: 20),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Buka menu di pojok kiri atas untuk fitur lainnya',
-                        style: TextStyle(
-                          color: theme.colorScheme.onSurface.withOpacity(0.7),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       ),
     );
   }
 
-  // --- Dialog untuk Test Notifikasi ---
-  void _showNotificationTestDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Test Notifikasi'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Pilih jenis notifikasi untuk ditest:'),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                _testInstantNotification();
-              },
-              icon: const Icon(Icons.flash_on),
-              label: const Text('Notifikasi Instant'),
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(context);
-                _testDelayedNotification();
-              },
-              icon: const Icon(Icons.schedule),
-              label: const Text('Notifikasi Delay 5 Detik'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Tutup'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // --- Helper Widget Info Tile ---
+  // --- Helper Widget Info Tile (Tetap sama) ---
   Widget _buildInfoTile({
     required IconData icon,
     required String label,
