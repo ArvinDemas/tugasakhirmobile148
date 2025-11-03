@@ -563,74 +563,210 @@ class _StoreScreenState extends State<StoreScreen> {
     );
   }
 
-  /**
-   * Helper Widget untuk membuat satu Card Produk. (Sama, bisa diklik)
-   */
-  Widget _buildProductCard({
-    required ThemeData theme,
-    required Map<String, dynamic> product,
-    required Map<String, dynamic> rates,
-  }) {
-    final String imagePath = product['imagePath'] as String;
-    final String name = product['name'] as String;
-    final double priceGBP = product['priceGBP'] as double;
-    final double exchangeRate = (rates[_selectedCurrency] as num?)?.toDouble() ?? 1.0;
-    final double convertedPrice = priceGBP * exchangeRate;
-    final formatPriceGBP = NumberFormat.currency(symbol: '£', decimalDigits: 2, locale: 'en_GB').format(priceGBP);
-    final formatConverted = NumberFormat.currency(
-        symbol: (_selectedCurrency == 'IDR' ? 'Rp ' : _selectedCurrency == 'USD' ? '\$' : _selectedCurrency == 'EUR' ? '€' : _selectedCurrency + ' '),
-        decimalDigits: (_selectedCurrency == 'IDR' ? 0 : 2),
-        locale: 'id_ID'
-    ).format(convertedPrice);
-
-    return InkWell(
-       onTap: () {
-         print("[StoreScreen] Card '$name' ditekan.");
-         Navigator.pushNamed(
-           context,
-           '/product-detail',
-           arguments: ProductDetailArguments(
-             product: product,
-             rates: rates,
-             initialCurrency: _selectedCurrency,
-           ),
-         );
-       },
-       borderRadius: BorderRadius.circular(16.0),
-       child: Card(
-         margin: const EdgeInsets.only(bottom: 16),
-         child: Padding(
-           padding: const EdgeInsets.all(12.0),
-           child: Row(
-             crossAxisAlignment: CrossAxisAlignment.start,
-             children: [
-               ClipRRect(
-                 borderRadius: BorderRadius.circular(8.0),
-                 child: Image.asset(
-                   imagePath, width: 100, height: 100, fit: BoxFit.cover,
-                   errorBuilder: (context, error, stack) => Container(width: 100, height: 100, color: theme.colorScheme.surfaceVariant, child: const Icon(Icons.image_not_supported, color: Colors.grey)),
-                 ),
-               ),
-               const SizedBox(width: 16),
-               Expanded(
-                 child: Column(
-                   crossAxisAlignment: CrossAxisAlignment.start,
-                   children: [
-                     Text(name, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500, color: theme.colorScheme.onSurface), maxLines: 2, overflow: TextOverflow.ellipsis),
-                     const SizedBox(height: 8),
-                     Text(formatPriceGBP, style: TextStyle(fontSize: 14, color: theme.colorScheme.outline, decoration: TextDecoration.lineThrough)),
-                     const SizedBox(height: 4),
-                     Text(formatConverted, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
-                   ],
-                 ),
-               ),
-               Icon(Icons.chevron_right, color: theme.colorScheme.outline, size: 28),
-             ],
-           ),
-         ),
-       ),
-    );
+// Cek apakah produk sudah di-bookmark
+Future<bool> _isBookmarked(int productId) async {
+  try {
+    final userBox = Hive.box('users');
+    final currentUserEmail = userBox.get('currentUserEmail');
+    
+    if (currentUserEmail != null) {
+      final userData = userBox.get(currentUserEmail) as Map?;
+      if (userData != null && userData.containsKey('bookmarks')) {
+        List<dynamic> bookmarks = List.from(userData['bookmarks'] ?? []);
+        return bookmarks.any((product) => product['id'] == productId);
+      }
+    }
+  } catch (e) {
+    print('[StoreScreen] Error checking bookmark: $e');
   }
+  return false;
+}
+
+// Toggle bookmark (tambah/hapus)
+Future<void> _toggleBookmark(Map<String, dynamic> product) async {
+  try {
+    final userBox = Hive.box('users');
+    final currentUserEmail = userBox.get('currentUserEmail');
+    
+    if (currentUserEmail == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Harap login terlebih dahulu'))
+        );
+      }
+      return;
+    }
+    
+    final userData = Map<dynamic, dynamic>.from(userBox.get(currentUserEmail) ?? {});
+    List<dynamic> bookmarks = List.from(userData['bookmarks'] ?? []);
+    
+    final productId = product['id'];
+    final isCurrentlyBookmarked = bookmarks.any((p) => p['id'] == productId);
+    
+    if (isCurrentlyBookmarked) {
+      // Hapus dari bookmark
+      bookmarks.removeWhere((p) => p['id'] == productId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Dihapus dari favorit'),
+            backgroundColor: Colors.orange,
+          )
+        );
+      }
+    } else {
+      // Tambah ke bookmark
+      bookmarks.add(product);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Ditambahkan ke favorit'),
+            backgroundColor: Colors.green,
+          )
+        );
+      }
+    }
+    
+    userData['bookmarks'] = bookmarks;
+    await userBox.put(currentUserEmail, userData);
+    
+    setState(() {}); // Refresh UI
+    
+  } catch (e) {
+    print('[StoreScreen] Error toggling bookmark: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal: $e'), backgroundColor: Colors.redAccent)
+      );
+    }
+  }
+}
+
+// --- UPDATE WIDGET _buildProductCard ---
+// Ganti fungsi _buildProductCard yang lama dengan ini:
+
+Widget _buildProductCard({
+  required ThemeData theme,
+  required Map<String, dynamic> product,
+  required Map<String, dynamic> rates,
+}) {
+  final String imagePath = product['imagePath'] as String;
+  final String name = product['name'] as String;
+  final double priceGBP = product['priceGBP'] as double;
+  final int productId = product['id'] as int;
+  
+  final double exchangeRate = (rates[_selectedCurrency] as num?)?.toDouble() ?? 1.0;
+  final double convertedPrice = priceGBP * exchangeRate;
+  
+  final formatPriceGBP = NumberFormat.currency(symbol: '£', decimalDigits: 2, locale: 'en_GB').format(priceGBP);
+  final formatConverted = NumberFormat.currency(
+      symbol: (_selectedCurrency == 'IDR' ? 'Rp ' : _selectedCurrency == 'USD' ? '\$' : _selectedCurrency == 'EUR' ? '€' : _selectedCurrency + ' '),
+      decimalDigits: (_selectedCurrency == 'IDR' ? 0 : 2),
+      locale: 'id_ID'
+  ).format(convertedPrice);
+
+  return Card(
+    margin: const EdgeInsets.only(bottom: 16),
+    child: InkWell(
+      onTap: () {
+        print("[StoreScreen] Card '$name' ditekan.");
+        Navigator.pushNamed(
+          context,
+          '/product-detail',
+          arguments: ProductDetailArguments(
+            product: product,
+            rates: rates,
+            initialCurrency: _selectedCurrency,
+          ),
+        );
+      },
+      borderRadius: BorderRadius.circular(16.0),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Gambar Produk
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8.0),
+              child: Image.asset(
+                imagePath, width: 100, height: 100, fit: BoxFit.cover,
+                errorBuilder: (context, error, stack) => Container(
+                  width: 100, height: 100, 
+                  color: theme.colorScheme.surfaceVariant, 
+                  child: const Icon(Icons.image_not_supported, color: Colors.grey)
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            
+            // Info Produk
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name, 
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w500, 
+                      color: theme.colorScheme.onSurface
+                    ), 
+                    maxLines: 2, 
+                    overflow: TextOverflow.ellipsis
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    formatPriceGBP, 
+                    style: TextStyle(
+                      fontSize: 14, 
+                      color: theme.colorScheme.outline, 
+                      decoration: TextDecoration.lineThrough
+                    )
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    formatConverted, 
+                    style: TextStyle(
+                      fontSize: 18, 
+                      fontWeight: FontWeight.bold, 
+                      color: theme.colorScheme.primary
+                    )
+                  ),
+                ],
+              ),
+            ),
+            
+            // Kolom Ikon (Bookmark & Chevron)
+            Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                // Tombol Bookmark
+                FutureBuilder<bool>(
+                  future: _isBookmarked(productId),
+                  builder: (context, snapshot) {
+                    final isBookmarked = snapshot.data ?? false;
+                    return IconButton(
+                      icon: Icon(
+                        isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                        color: isBookmarked ? Colors.amber : theme.colorScheme.outline,
+                      ),
+                      onPressed: () => _toggleBookmark(product),
+                      tooltip: isBookmarked ? 'Hapus dari Favorit' : 'Tambah ke Favorit',
+                    );
+                  },
+                ),
+                
+                // Ikon Chevron (Detail)
+                Icon(Icons.chevron_right, color: theme.colorScheme.outline, size: 28),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+  
 
 } // Akhir Class _StoreScreenState
 

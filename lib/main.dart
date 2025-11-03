@@ -26,6 +26,9 @@ import 'tabs/order_success_screen.dart';
 import 'tabs/order_history_screen.dart';
 import 'screens/map_picker_screen.dart';
 import 'screens/news_detail_screen.dart';
+import 'screens/bookmark_screen.dart'; // Import halaman bookmark
+import 'screens/feedback_screen.dart'; // Import halaman feedback
+import 'services/notification_service.dart'; // Import NotificationService
 
 
 
@@ -46,6 +49,16 @@ void main() async {
 
   } catch (e) {
     print("FATAL ERROR initializing Hive: $e");
+  }
+
+  
+  try {
+    final notificationService = NotificationService();
+    await notificationService.initialize();
+    await notificationService.requestPermissions();
+    print("NotificationService berhasil diinisialisasi!");
+  } catch (e) {
+    print("Error initializing NotificationService: $e");
   }
 
   // Inisialisasi format tanggal lokal (Indonesia)
@@ -249,6 +262,8 @@ class WilliamsApp extends StatelessWidget {
         '/order-history': (context) => const OrderHistoryScreen(),
         '/map-picker': (context) => const MapPickerScreen(),
         '/news-detail': (context) => const NewsDetailScreen(),
+        '/bookmark': (context) => const BookmarkScreen(), // Route bookmark
+       '/feedback': (context) => const FeedbackScreen(), // Route feedback
       },
     ); // Akhir MaterialApp
   }
