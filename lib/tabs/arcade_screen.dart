@@ -3,9 +3,10 @@
  * Deskripsi: Halaman tab "Arcade" yang berisi game balapan sederhana.
  *
  * UPDATE:
- * - Menambahkan fitur Daily Mission dengan Rank dan High Score (via Hive).
- * - UPDATE 2: Memindahkan Daily Mission Card ke dalam dialog (pop-up)
- * yang dipicu oleh IconButton baru di AppBar agar tidak menutupi game.
+ * - Menambahkan fitur Daily Mission (di dialog AppBar).
+ * - Menambahkan fitur Gyro Control.
+ * - (FINAL) Memindahkan pengaturan Gyro/Button ke dialog AppBar (ikon settings).
+ * - (FINAL) Memperbaiki logika sensitivitas gyro (nilai tinggi = lebih responsif).
  */
 
 import 'dart:async'; // Untuk Timer
@@ -17,6 +18,9 @@ import 'package:vibration/vibration.dart'; // Untuk getaran
 // Import Hive
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
+
+// Import Gyro
+import 'package:sensors_plus/sensors_plus.dart';
 
 // Enum untuk status game
 enum GameStatus { ready, playing, gameOver }
@@ -30,55 +34,52 @@ class ArcadeScreen extends StatefulWidget {
 
 class _ArcadeScreenState extends State<ArcadeScreen> {
   // --- STATE GAME ---
-  GameStatus _gameStatus = GameStatus.ready; // Status game saat ini
-  int _score = 0; // Skor pemain
-  double _playerX = 0.0; // Posisi horizontal pemain (-1.0 kiri, 0.0 tengah, 1.0 kanan)
-  final List<Map<String, double>> _obstacles = []; // List musuh/rintangan
-  Timer? _gameTimer; // Timer untuk game loop
-  final Random _random = Random(); // Untuk posisi musuh
-  double _gameSpeed = 5.0; // Kecepatan awal musuh
-  int _obstacleFrequency = 20; // Frekuensi kemunculan musuh (lebih kecil = lebih sering)
-  int _frameCount = 0; // Counter untuk spawn musuh
+  GameStatus _gameStatus = GameStatus.ready;
+  int _score = 0;
+  double _playerX = 0.0;
+  final List<Map<String, double>> _obstacles = [];
+  Timer? _gameTimer;
+  final Random _random = Random();
+  double _gameSpeed = 5.0;
+  int _obstacleFrequency = 20;
+  int _frameCount = 0;
 
-  // --- UKURAN GAME AREA (didapat dari LayoutBuilder) ---
+  // --- UKURAN GAME AREA ---
   double _gameAreaWidth = 0.0;
   double _gameAreaHeight = 0.0;
-  final double _playerWidth = 50.0; // Lebar pemain (untuk deteksi tabrakan)
-  final double _obstacleWidth = 50.0; // Lebar musuh (untuk deteksi tabrakan)
-  final double _playerBottomOffset = 30.0; // Jarak pemain dari bawah
+  final double _playerWidth = 50.0;
+  final double _obstacleWidth = 50.0;
+  final double _playerBottomOffset = 30.0;
 
   // --- AUDIO ---
-  final AudioPlayer _audioPlayer = AudioPlayer(); // Player untuk SFX
-  final AudioPlayer _musicPlayer = AudioPlayer(); // Player untuk BGM
-  // Path asset suara (pastikan file ada di assets/audio/)
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  final AudioPlayer _musicPlayer = AudioPlayer();
   final String _crashSoundPath = 'audio/crash.mp3';
   final String _musicPath = 'audio/audi_sound.mp3';
 
   // --- STATE DAILY MISSION ---
-  int _todayHighScore = 0; // Skor tertinggi hari ini
-  int _allTimeHighScore = 0; // Skor tertinggi sepanjang masa
-  String _currentRank = "Rookie"; // Rank saat ini
-  String _lastPlayedDate = ""; // Tanggal terakhir main
+  int _todayHighScore = 0;
+  int _allTimeHighScore = 0;
+  String _currentRank = "Rookie";
+  String _lastPlayedDate = "";
 
-  // Rank system
   final Map<String, int> _rankThresholds = {
-    "Rookie": 0,
-    "Beginner": 50,
-    "Amateur": 100,
-    "Pro": 200,
-    "Expert": 350,
-    "Master": 500,
-    "Legend": 750,
+    "Rookie": 0, "Beginner": 50, "Amateur": 100, "Pro": 200,
+    "Expert": 350, "Master": 500, "Legend": 750,
   };
+
+  // --- STATE UNTUK GYRO CONTROL ---
+  bool _isGyroControl = false;
+  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
+  double _gyroSensitivity = 15.0; // Nilai tengah (5=Lambat, 30=Cepat)
+  double _centerCalibration = 0.0;
 
 
   @override
   void initState() {
     super.initState();
-    _loadGameData(); // Load data dari Hive
-    // Set mode BGM agar loop
+    _loadGameData();
     _musicPlayer.setReleaseMode(ReleaseMode.loop);
-    // Pre-load BGM (opsional tapi bagus)
     _preloadMusic();
   }
 
@@ -94,9 +95,10 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
 
   @override
   void dispose() {
-    _gameTimer?.cancel(); // Hentikan game loop
-    _audioPlayer.dispose(); // Hentikan SFX player
-    _musicPlayer.dispose(); // Hentikan BGM player
+    _gameTimer?.cancel();
+    _audioPlayer.dispose();
+    _musicPlayer.dispose();
+    _accelerometerSubscription?.cancel(); // Hentikan Gyro
     super.dispose();
   }
 
@@ -116,7 +118,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
             _lastPlayedDate = userData['lastArcadeDate'] ?? '';
             _allTimeHighScore = userData['arcadeHighScore'] ?? 0;
             
-            // Reset daily score jika hari berbeda
             if (_lastPlayedDate != today) {
               _todayHighScore = 0;
             } else {
@@ -124,6 +125,11 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
             }
             
             _currentRank = _calculateRank(_todayHighScore);
+
+            // Muat juga setelan kontrol
+            _isGyroControl = userData['arcadeUseGyro'] ?? false;
+            _gyroSensitivity = (userData['arcadeGyroSens'] as num? ?? 15.0).toDouble();
+
           });
         }
       }
@@ -149,34 +155,27 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         final userData = Map<dynamic, dynamic>.from(userBox.get(currentUserEmail) ?? {});
         final String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
         
-        // Update daily score jika lebih tinggi
         int currentDailyScore = userData['arcadeDailyScore'] ?? 0;
-        // Cek juga tanggal terakhir main dari state
         if (_lastPlayedDate != today) currentDailyScore = 0;
         
         if (finalScore > currentDailyScore) {
           userData['arcadeDailyScore'] = finalScore;
           _todayHighScore = finalScore;
         } else {
-          // Jika skor baru tidak lebih tinggi, pastikan _todayHighScore
-          // tetap mencerminkan skor tertinggi hari ini
           _todayHighScore = currentDailyScore;
         }
         
-        // Update all-time high score
         int currentHighScore = userData['arcadeHighScore'] ?? 0;
         if (finalScore > currentHighScore) {
           userData['arcadeHighScore'] = finalScore;
           _allTimeHighScore = finalScore;
         } else {
-          // Pastikan _allTimeHighScore tetap yang tertinggi
           _allTimeHighScore = currentHighScore;
         }
         
         userData['lastArcadeDate'] = today;
         await userBox.put(currentUserEmail, userData);
         
-        // Update UI state setelah save
         setState(() {
           _currentRank = _calculateRank(_todayHighScore);
           _lastPlayedDate = today;
@@ -186,8 +185,77 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       print('[Arcade] Error saving game data: $e');
     }
   }
+  
+  // Fungsi untuk menyimpan HANYA pengaturan
+  Future<void> _saveControlSettings() async {
+     try {
+      final userBox = Hive.box('users');
+      final currentUserEmail = userBox.get('currentUserEmail');
+      
+      if (currentUserEmail != null) {
+        final userData = Map<dynamic, dynamic>.from(userBox.get(currentUserEmail) ?? {});
+        
+        userData['arcadeUseGyro'] = _isGyroControl;
+        userData['arcadeGyroSens'] = _gyroSensitivity;
+        
+        await userBox.put(currentUserEmail, userData);
+      }
+     } catch (e) {
+       print('[Arcade] Error saving control settings: $e');
+     }
+  }
 
-  // --- FUNGSI KONTROL GAME ---
+  // --- FUNGSI KONTROL GAME & GYRO ---
+
+  void _startGyroControl() {
+    if (!_isGyroControl) return;
+    
+    _calibrateGyro();
+    
+    print('[Arcade] Starting gyro control...');
+    _accelerometerSubscription = accelerometerEventStream().listen(
+      (AccelerometerEvent event) {
+        if (_gameStatus != GameStatus.playing) return;
+        
+        double tilt = event.x - _centerCalibration;
+        
+        // --- LOGIKA SENSITIVITAS DIPERBAIKI ---
+        // Nilai _gyroSensitivity: 5 (Lambat) -> 30 (Cepat)
+        // Kita map ke divider: 30 (Lambat) -> 5 (Cepat)
+        double maxDivider = 35.0; // 35 - 5 = 30 (lambat), 35 - 30 = 5 (cepat)
+        double divider = maxDivider - _gyroSensitivity;
+        double movement = (tilt / divider).clamp(-1.0, 1.0);
+        // --- AKHIR PERBAIKAN ---
+
+        if (mounted) {
+          setState(() {
+            _playerX = movement;
+          });
+        }
+      },
+      onError: (error) {
+        print('[Arcade] Gyro error: $error');
+      },
+    );
+  }
+
+  void _stopGyroControl() {
+    _accelerometerSubscription?.cancel();
+    _accelerometerSubscription = null;
+    print('[Arcade] Gyro control stopped.');
+  }
+
+  Future<void> _calibrateGyro() async {
+    try {
+      final event = await accelerometerEventStream().first
+          .timeout(const Duration(seconds: 2));
+      _centerCalibration = event.x;
+      print('[Arcade] Gyro calibrated. Center: $_centerCalibration');
+    } catch (e) {
+      print('[Arcade] Calibration failed: $e');
+      _centerCalibration = 0.0;
+    }
+  }
 
   void _startGame() {
     if (_gameStatus == GameStatus.playing) return;
@@ -199,9 +267,14 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       _gameStatus = GameStatus.playing;
       _frameCount = 0;
       _gameSpeed = 5.0;
+      _playerX = 0.0; // Reset posisi
     });
 
     _playMusic();
+    
+    if (_isGyroControl) {
+      _startGyroControl();
+    }
 
     _gameTimer = Timer.periodic(const Duration(milliseconds: 33), (timer) {
       if (_gameStatus != GameStatus.playing) {
@@ -216,11 +289,11 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     print("[ArcadeScreen] Game Over! Score: $_score");
     _gameTimer?.cancel();
     _stopMusic();
+    _stopGyroControl(); // Hentikan gyro
     _playCrashSound();
     _vibrate();
     
-    // SAVE GAME DATA
-    _saveGameData(_score); // Fungsi ini akan update state (skor, rank)
+    _saveGameData(_score); // Simpan skor
 
     if (mounted) {
       setState(() {
@@ -233,6 +306,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       print("[ArcadeScreen] Resetting game...");
       _gameTimer?.cancel();
       _stopMusic();
+      _stopGyroControl(); // Hentikan gyro
 
     if (mounted) {
       setState(() {
@@ -241,9 +315,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         _playerX = 0.0;
         _obstacles.clear();
       });
-      // Selalu load data terbaru saat reset
-      // agar rank di dialog/card terupdate
-      _loadGameData();
+      _loadGameData(); // Muat ulang skor/rank
     }
   }
 
@@ -278,13 +350,16 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     // --- 3. Deteksi Tabrakan ---
     _checkCollisions();
 
-    // --- 4. Tingkatkan Kesulitan (Opsional) ---
+    // --- 4. Tingkatkan Kesulitan ---
     if (_score > 0 && _score % 100 == 0) {
       _gameSpeed += 0.2;
       print("[ArcadeScreen] Level Up! Speed: $_gameSpeed");
     }
 
-    setState(() {});
+    // Hanya panggil setState jika tidak pakai gyro (karena gyro punya setState sendiri)
+    if (!_isGyroControl) {
+      setState(() {});
+    }
   }
 
   void _checkCollisions() {
@@ -311,7 +386,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     }
   }
 
-  // --- FUNGSI KONTROL PEMAIN ---
+  // --- FUNGSI KONTROL PEMAIN (TOMBOL) ---
   void _movePlayer(double direction) {
     if (_gameStatus != GameStatus.playing) return;
     setState(() {
@@ -372,7 +447,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
 
 
   // --- UI BUILD METHOD ---
-  // --- UPDATE: build() method ---
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -381,11 +455,17 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         title: const Text('Williams Arcade'),
         centerTitle: true,
         actions: [
-          // --- BARU: IconButton untuk Daily Mission ---
+          // Tombol Misi Harian
           IconButton(
-            icon: const Icon(Icons.military_tech_outlined), // Ikon medali/rank
-            onPressed: _showDailyMissionDialog, // Panggil dialog
+            icon: const Icon(Icons.military_tech_outlined),
+            onPressed: _showDailyMissionDialog,
             tooltip: 'Lihat Misi Harian',
+          ),
+          // --- BARU: Tombol Settings Kontrol ---
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: _showControlSettingsDialog, // Panggil dialog settings
+            tooltip: 'Pengaturan Kontrol',
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -396,10 +476,9 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       ),
       body: Column(
         children: [
-          // --- KARTU MISI HARIAN DIHAPUS DARI SINI ---
-          // _buildDailyMissionCard(Theme.of(context)), // <-- DIHAPUS
+          // --- KARTU KONTROL DIHAPUS DARI SINI ---
           
-          // 1. Tampilan Skor (tetap)
+          // 1. Tampilan Skor
           Container(
             padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
             width: double.infinity,
@@ -415,7 +494,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
             ),
           ),
 
-          // 2. Game Area (tetap)
+          // 2. Game Area
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -434,36 +513,63 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
             ),
           ),
 
-          // 3. Tombol Kontrol (tetap)
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
-            color: theme.colorScheme.surface,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton(
-                  onPressed: () => _movePlayer(-0.1),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.colorScheme.surfaceContainerHigh,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          // 3. Tombol Kontrol (HANYA MUNCUL JIKA MODE BUTTON)
+          if (!_isGyroControl)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
+              color: theme.colorScheme.surface,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton(
+                    onPressed: () => _movePlayer(-0.1),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.surfaceContainerHigh,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Icon(Icons.arrow_back, size: 30),
                   ),
-                  child: const Icon(Icons.arrow_back, size: 30),
-                ),
-                ElevatedButton(
-                  onPressed: () => _movePlayer(0.1),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: theme.colorScheme.surfaceContainerHigh,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ElevatedButton(
+                    onPressed: () => _movePlayer(0.1),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.surfaceContainerHigh,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Icon(Icons.arrow_forward, size: 30),
                   ),
-                  child: const Icon(Icons.arrow_forward, size: 30),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          
+          // 4. INSTRUKSI GYRO (MUNCUL JIKA MODE GYRO)
+          if (_isGyroControl)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
+              color: theme.colorScheme.surface,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.screen_rotation,
+                    color: theme.colorScheme.primary,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Miringkan HP ke kiri dan kanan',
+                    style: TextStyle(
+                      color: theme.colorScheme.outline,
+                      fontSize: 14,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );
@@ -471,12 +577,9 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
 
   // --- WIDGET HELPER UNTUK UI GAME ---
 
-  /**
-    * Membangun background jalan (statis).
-    */
   Widget _buildRoadBackground() {
     return Container(
-      color: Colors.grey[800], // Warna aspal
+      color: Colors.grey[800],
       child: Stack(
         children: [
           Align(
@@ -500,10 +603,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     );
   }
 
-
-  /**
-    * Membangun widget Pemain.
-    */
   Widget _buildPlayer() {
     if (_gameAreaWidth == 0.0) return const SizedBox.shrink();
 
@@ -526,9 +625,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     );
   }
 
-  /**
-    * Membangun list widget Musuh/Rintangan.
-    */
   List<Widget> _buildObstacles() {
       if (_gameAreaWidth == 0.0) return [];
 
@@ -567,9 +663,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       return obstacleWidgets;
   }
 
-  /**
-    * Membangun Overlay (Tombol Start / Teks Game Over).
-    */
   Widget _buildOverlay() {
     if (_gameStatus == GameStatus.playing) {
       return const SizedBox.shrink();
@@ -600,7 +693,30 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                 color: Colors.white,
               ),
             ),
-          const SizedBox(height: 24),
+          
+          if (_gameStatus == GameStatus.gameOver)
+             const SizedBox(height: 24),
+
+          // Tampilkan info mode hanya saat 'ready'
+          if (_gameStatus == GameStatus.ready) ...[
+            Icon(
+              _isGyroControl ? Icons.screen_rotation : Icons.touch_app,
+              color: Theme.of(context).colorScheme.primary,
+              size: 48,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _isGyroControl
+                  ? 'Mode: Gyro Control'
+                  : 'Mode: Button Control',
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+
           ElevatedButton(
             onPressed: _startGame,
             style: ElevatedButton.styleFrom(
@@ -619,18 +735,14 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
   }
 
 
-  // --- FUNGSI BARU: Menampilkan Dialog Misi Harian ---
+  // --- WIDGET HELPER (DAILY MISSION & SETTINGS) ---
+
   void _showDailyMissionDialog() {
-    // Panggil _loadGameData setiap kali dialog dibuka
-    // untuk memastikan data rank dan skor adalah yang terbaru.
     _loadGameData().then((_) {
-      // Tampilkan dialog HANYA setelah data terbaru dimuat
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Misi Harian & Peringkat'),
-          // Gunakan _buildDailyMissionCard sebagai konten dialog
-          // Kita butuh Builder agar bisa dapat Theme baru di dalam dialog
           content: Builder(
             builder: (context) {
               return _buildDailyMissionCard(Theme.of(context));
@@ -647,19 +759,37 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     });
   }
 
+  // --- FUNGSI BARU: Menampilkan Dialog Pengaturan Kontrol ---
+  void _showControlSettingsDialog() {
+    final theme = Theme.of(context);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Pengaturan Kontrol'),
+        content: _buildControlToggle(theme), // Panggil widget toggle
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _saveControlSettings(); // Simpan pengaturan saat dialog ditutup
+            },
+            child: const Text('Simpan & Tutup'),
+          )
+        ],
+      ),
+    );
+  }
 
-  // --- Widget untuk Daily Mission Card (sekarang dipanggil dialog) ---
+
   Widget _buildDailyMissionCard(ThemeData theme) {
-    // Cari next rank
     String nextRank = "Legend";
     int nextThreshold = 1000;
     bool isMaxRank = false;
     
-    // Perbarui rank berdasarkan state terbaru
     final currentRank = _calculateRank(_todayHighScore);
     
     _rankThresholds.forEach((key, value) {
-      if (value > _todayHighScore && value < nextThreshold) {
+      if (value > _todayHighScore && (value < nextThreshold || nextRank == "Legend")) {
         nextRank = key;
         nextThreshold = value;
       }
@@ -672,20 +802,19 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     }
     
     int pointsNeeded = nextThreshold - _todayHighScore;
-    double progress = isMaxRank ? 1.0 : (_todayHighScore / nextThreshold).clamp(0.0, 1.0);
+    double progress = (nextThreshold == 0 || isMaxRank) ? 1.0 : (_todayHighScore / nextThreshold).clamp(0.0, 1.0);
     
-    // Gunakan SizedBox untuk membatasi lebar card di dalam dialog
     return SizedBox(
-      width: MediaQuery.of(context).size.width * 0.8, // Lebar 80% layar
-      child: Column( // Ganti Card menjadi Column
-        mainAxisSize: MainAxisSize.min, // Agar dialog pas
+      width: MediaQuery.of(context).size.width * 0.8,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Peringkat Harian', // Judul lebih jelas
+                'Peringkat Harian',
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -701,7 +830,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
                   ),
                 ),
                 child: Text(
-                  currentRank.toUpperCase(), // Gunakan rank yang baru dihitung
+                  currentRank.toUpperCase(),
                   style: TextStyle(
                     color: theme.colorScheme.primary,
                     fontWeight: FontWeight.bold,
@@ -714,7 +843,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
           ),
           const SizedBox(height: 16),
           
-          // Progress Bar
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -755,7 +883,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
           ),
           const SizedBox(height: 16),
           
-          // Stats
           Row(
             children: [
               Expanded(
@@ -812,6 +939,129 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Widget untuk toggle control mode (dipanggil di dialog)
+  Widget _buildControlToggle(ThemeData theme) {
+    // Gunakan StatefulBuilder agar slider/switch bisa update
+    // di dalam dialog tanpa menutupnya.
+    return StatefulBuilder(
+      builder: (context, setDialogState) {
+        return SizedBox(
+          width: MediaQuery.of(context).size.width * 0.8,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        _isGyroControl ? Icons.screen_rotation : Icons.touch_app,
+                        color: theme.colorScheme.primary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Kontrol',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  // TOGGLE SWITCH
+                  Switch(
+                    value: _isGyroControl,
+                    onChanged: _gameStatus == GameStatus.playing
+                        ? null // Disable saat sedang main
+                        : (bool value) {
+                            // Panggil setState utama (untuk logika game)
+                            setState(() {
+                              _isGyroControl = value;
+                            });
+                            // Panggil setState dialog (untuk update UI dialog)
+                            setDialogState(() {
+                              // _isGyroControl = value; // (sudah di-set di atas)
+                            });
+
+                            // Tampilkan feedback (di SnackBar utama)
+                            ScaffoldMessenger.of(context).removeCurrentSnackBar();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  value
+                                      ? 'Mode Gyro aktif - Miringkan HP untuk bermain'
+                                      : 'Mode Tombol aktif',
+                                ),
+                                duration: const Duration(seconds: 2),
+                                backgroundColor: theme.colorScheme.primary,
+                              ),
+                            );
+                          },
+                    activeColor: theme.colorScheme.primary,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _isGyroControl
+                    ? '🎮 Gyro: Miringkan HP kiri-kanan'
+                    : '🎮 Tombol: Tap untuk bergerak',
+                style: TextStyle(
+                  color: theme.colorScheme.outline,
+                  fontSize: 13,
+                ),
+              ),
+              
+              // SENSITIVITY SLIDER (HANYA MUNCUL JIKA GYRO MODE)
+              if (_isGyroControl) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Sensitivitas: ${_gyroSensitivity.toInt()}',
+                  style: TextStyle(
+                    color: theme.colorScheme.outline,
+                    fontSize: 12,
+                  ),
+                ),
+                Slider(
+                  value: _gyroSensitivity,
+                  min: 5.0, // Lambat
+                  max: 30.0, // Cepat
+                  divisions: 25,
+                  label: _gyroSensitivity.toInt().toString(),
+                  onChanged: _gameStatus == GameStatus.playing
+                      ? null // Disable saat main
+                      : (double value) {
+                          // Panggil setState utama (untuk logika game)
+                          setState(() {
+                            _gyroSensitivity = value;
+                          });
+                          // Panggil setState dialog (untuk update UI)
+                          setDialogState(() {
+                            // _gyroSensitivity = value; // (sudah di-set di atas)
+                          });
+                        },
+                  activeColor: theme.colorScheme.primary,
+                  inactiveColor: theme.colorScheme.surfaceContainerHigh,
+                ),
+                Text(
+                  // Perbaiki deskripsi
+                  'Lebih tinggi = lebih responsif (lebih cepat)',
+                  style: TextStyle(
+                    color: theme.colorScheme.outline,
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      }
     );
   }
 }

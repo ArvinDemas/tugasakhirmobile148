@@ -393,7 +393,7 @@ class _StoreScreenState extends State<StoreScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Store & Misi'),
+        title: const Text('Store Williams Racing'),
         centerTitle: true,
       ),
       body: ListView(
@@ -488,7 +488,7 @@ class _StoreScreenState extends State<StoreScreen> {
           child: AspectRatio(
             aspectRatio: 16 / 9, // Rasio 16:9 agar tidak terpotong
             child: Image.asset(
-              'assets/images/williams_carousel_1.png',
+              'assets/images/promo.png',
               fit: BoxFit.cover,
               errorBuilder: (context, error, stack) => Container(
                 color: theme.colorScheme.surfaceContainerHigh,

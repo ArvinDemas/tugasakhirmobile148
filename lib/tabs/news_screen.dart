@@ -36,6 +36,7 @@ class _NewsScreenState extends State<NewsScreen> {
       "source": "PlanetF1",
       "date": "29 Oktober 2025",
       "imagePath": "assets/images/news_sargeant.png", // Ganti dengan asset Anda
+      "url": "https://www.planetf1.com",
       "content": "Logan Sargeant mengakui bahwa tekanannya meningkat untuk membuktikan kemampuannya dan mengamankan kursinya di Williams untuk musim depan. Pembalap asal Amerika Serikat itu menunjukkan beberapa kemajuan tetapi masih tertinggal dari rekan setimnya..."
     },
     {
@@ -44,6 +45,7 @@ class _NewsScreenState extends State<NewsScreen> {
       "source": "Motorsport.com",
       "date": "28 Oktober 2025",
       "imagePath": "assets/images/news_team.png", // Ganti dengan asset Anda
+      "url": "https://id.motorsport.com",
       "content": "Setelah nyaris meraih poin di balapan terakhir, Team Principal Williams Racing, James Vowles, menetapkan target ambisius untuk meraih poin ganda di Grand Prix mendatang. 'Mobil kami memiliki kecepatan, kami hanya perlu eksekusi yang sempurna,' ujarnya..."
     },
      {
@@ -52,6 +54,7 @@ class _NewsScreenState extends State<NewsScreen> {
       "source": "The Race",
       "date": "27 Oktober 2025",
       "imagePath": "assets/images/news_factory.png", // Ganti dengan asset Anda
+      "url": "https://www.the-race.com",
       "content": "Williams akhirnya memperkenalkan sasis cadangan ketiga mereka, sebuah langkah krusial yang sempat tertunda. Analis teknis kami membedah mengapa sasis baru ini bukan hanya sekadar cadangan, tetapi juga membawa perbaikan bobot yang vital..."
     },
   ];

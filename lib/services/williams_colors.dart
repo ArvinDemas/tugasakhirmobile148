@@ -15,28 +15,29 @@ import 'package:flutter/material.dart';
 
 class WilliamsColors {
   // ==========================================
-  // WARNA WILLIAMS RACING 2002 LIVERY
+  // WARNA WILLIAMS RACING OFFICIAL WEBSITE
+  // Berdasarkan: https://www.williamsf1.com/
   // ==========================================
   
-  // WARNA UTAMA (BMW Williams Blue - biru khas Williams 2002)
-  static const Color primaryColor = Color(0xFF0055B8); // Biru Williams BMW
+  // WARNA UTAMA (Williams Racing Cyan - warna signature modern)
+  static const Color primaryColor = Color(0xFF00A9E0); // Cyan/Turquoise Williams
   
-  // WARNA AKSEN (White/Silver dari livery 2002)
-  static const Color accentColor = Color(0xFFE8E8E8); // Abu-abu terang/Silver
+  // WARNA AKSEN (Electric Blue - untuk highlight & gradient)
+  static const Color accentColor = Color(0xFF0077C8); // Biru elektrik
   
-  // WARNA BACKGROUND (Dark Blue - untuk kontras elegan)
-  static const Color backgroundColor = Color(0xFF0A1128); // Biru sangat gelap
+  // WARNA BACKGROUND (Deep Dark - hampir hitam untuk elegance)
+  static const Color backgroundColor = Color(0xFF0D0D19); // Hitam kebiruan
   
-  // WARNA SURFACE (Card, Bottom Nav - biru gelap dengan sedikit warmth)
-  static const Color surfaceColor = Color(0xFF1A2744); // Biru gelap hangat
+  // WARNA SURFACE (Dark Card - untuk card & bottom nav)
+  static const Color surfaceColor = Color(0xFF1A1A2E); // Dark blue-grey
   
   // WARNA TEKS
-  static const Color textPrimaryColor = Color(0xFFFFFFFF); // Putih
-  static const Color textSecondaryColor = Color(0xFFB0B8C8); // Abu-abu terang
+  static const Color textPrimaryColor = Color(0xFFFFFFFF); // Pure white
+  static const Color textSecondaryColor = Color(0xFFA0A0A0); // Cool grey
   
-  // WARNA TAMBAHAN (dari livery 2002)
-  static const Color goldAccent = Color(0xFFFFD700); // Emas (untuk highlight)
-  static const Color darkAccent = Color(0xFF001F3F); // Navy tua
+  // WARNA TAMBAHAN (untuk variasi & depth)
+  static const Color gradientStart = Color(0xFF0D1C2A); // Dark gradient base
+  static const Color highlightColor = Color(0xFF00D9FF); // Bright cyan highlight
   
   // ==========================================
   // WARNA FUNGSIONAL (STATUS)
@@ -152,9 +153,9 @@ class WilliamsColors {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryColor,
-          foregroundColor: textPrimaryColor,
-          elevation: 2,
-          shadowColor: primaryColor.withOpacity(0.4),
+          foregroundColor: Colors.white,
+          elevation: 3,
+          shadowColor: primaryColor.withOpacity(0.5),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12.0),
           ),
@@ -282,7 +283,10 @@ class WilliamsColors {
   /// Gradient untuk header/card special
   static LinearGradient getPrimaryGradient() {
     return const LinearGradient(
-      colors: [primaryColor, Color(0xFF003A8C)],
+      colors: [
+        Color(0xFF00A9E0), // Cyan
+        Color(0xFF0077C8), // Blue
+      ],
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
     );
@@ -290,13 +294,26 @@ class WilliamsColors {
   
   /// Gradient untuk background subtle
   static LinearGradient getBackgroundGradient() {
-    return LinearGradient(
+    return const LinearGradient(
       colors: [
-        backgroundColor,
-        backgroundColor.withOpacity(0.8),
+        Color(0xFF0D1C2A), // Dark base
+        Color(0xFF0D0D19), // Almost black
       ],
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
+    );
+  }
+  
+  /// Gradient hero (seperti di website Williams)
+  static LinearGradient getHeroGradient() {
+    return const LinearGradient(
+      colors: [
+        Color(0xFF0D1C2A), // Dark edge
+        Color(0xFF00A9E0), // Cyan center
+        Color(0xFF0D1C2A), // Dark edge
+      ],
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
     );
   }
 }
@@ -305,18 +322,26 @@ class WilliamsColors {
 // CARA MENGUBAH WARNA SAAT PRESENTASI:
 // ==========================================
 // 1. Buka file ini (williams_colors.dart)
-// 2. Scroll ke atas, cari bagian "WARNA WILLIAMS RACING 2002 LIVERY"
+// 2. Scroll ke atas, cari bagian "WARNA WILLIAMS RACING OFFICIAL"
 // 3. Ubah nilai Color(0xFFxxxxxx) sesuai kebutuhan:
-//    - primaryColor: Warna tombol dan aksen utama
-//    - backgroundColor: Warna background gelap
-//    - surfaceColor: Warna card/kotak
-//    - accentColor: Warna aksen sekunder
+//    - primaryColor: Warna tombol dan aksen utama (default: Cyan #00A9E0)
+//    - backgroundColor: Warna background gelap (default: #0D0D19)
+//    - surfaceColor: Warna card/kotak (default: #1A1A2E)
+//    - accentColor: Warna aksen sekunder (default: #0077C8)
 // 4. Save file (Ctrl+S / Cmd+S)
 // 5. Hot Reload (tekan 'r' di terminal atau tombol hot reload di IDE)
 // 6. Selesai! Semua warna langsung berubah
 //
 // CONTOH PALET WARNA ALTERNATIF:
+// - Cyan Terang: primaryColor = Color(0xFF00D9FF)
+// - Biru Klasik: primaryColor = Color(0xFF0055B8)
 // - Merah Ferrari: primaryColor = Color(0xFFDC0000)
 // - Hijau Mercedes: primaryColor = Color(0xFF00D2BE)
 // - Oranye McLaren: primaryColor = Color(0xFFFF8700)
 // - Ungu Modern: primaryColor = Color(0xFF8C8AFA)
+//
+// TIPS PRESENTASI:
+// - Untuk tampilan lebih terang: ubah backgroundColor jadi #1A1A2E
+// - Untuk tampilan lebih gelap: ubah backgroundColor jadi #000000
+// - Untuk aksen lebih soft: kurangi saturasi primaryColor
+// - Untuk aksen lebih vibrant: tingkatkan brightness primaryColor

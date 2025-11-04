@@ -14,9 +14,9 @@ import 'package:flutter/material.dart';
 
 // Import halaman-halaman untuk setiap tab
 import '../tabs/home_screen.dart';       // Index 0
-import '../tabs/news_screen.dart.dart';  // Index 1
+import '../tabs/news_screen.dart';      // Index 1
 import '../tabs/store_screen.dart';      // Index 2
-import '../tabs/arcade_screen.dart';   // Index 3
+import '../tabs/arcade_screen.dart';      // Index 3
 // Import halaman ProfileScreen untuk diakses DARI drawer
 import '../tabs/profile_screen.dart'; // Pastikan path ini benar
 
@@ -92,12 +92,12 @@ class _MainScreenState extends State<MainScreen> {
              final newImagePath = userData['profileImagePath'] as String?;
              // Hanya update jika ada perubahan
              if (newUsername != _username || newImagePath != _profileImagePath) {
-                if (mounted) {
-                  setState(() {
-                    _username = newUsername;
-                    _profileImagePath = newImagePath;
-                  });
-                }
+               if (mounted) {
+                 setState(() {
+                   _username = newUsername;
+                   _profileImagePath = newImagePath;
+                 });
+               }
              }
            }
          }
@@ -129,24 +129,134 @@ class _MainScreenState extends State<MainScreen> {
     }
   }
 
-  // --- FUNGSI LOGOUT ---
+  // --- UPDATE FUNGSI LOGOUT (DARI SNIPPET) ---
   Future<void> _logout() async {
+    // Tampilkan dialog konfirmasi
+    final bool? confirmLogout = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Keluar Akun'),
+        content: const Text('Apakah Anda yakin ingin keluar dari akun ini?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+            ),
+            child: const Text('Keluar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmLogout != true) return;
+
     try {
       final userBox = Hive.box('users');
+      
+      // Hapus email user aktif
       await userBox.delete('currentUserEmail');
+      
+      // PENTING: Hapus status Remember Me
+      await userBox.put('rememberMeEnabled', false);
+      await userBox.delete('rememberedEmail');
+      
+      print("[MainScreen] Logout berhasil, Remember Me dihapus");
+      
       if (mounted) {
+        // Tampilkan pesan sukses
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Berhasil keluar dari akun'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
+        // Navigasi ke login dan hapus semua history
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }
     } catch (e) {
       print("[MainScreen] Error logout: $e");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Gagal logout: $e'), backgroundColor: Colors.redAccent));
+          SnackBar(
+            content: Text('Gagal logout: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
       }
     }
   }
+
+  // --- FUNGSI BARU (DARI SNIPPET): HAPUS INGAT SAYA ---
+  Future<void> _clearRememberMe() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus "Ingat Saya"'),
+        content: const Text(
+          'Anda harus login kembali di lain waktu. Lanjutkan?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      final userBox = Hive.box('users');
+      
+      // Hapus status Remember Me (tetap login di session ini)
+      await userBox.put('rememberMeEnabled', false);
+      await userBox.delete('rememberedEmail');
+      
+      print("[MainScreen] Remember Me berhasil dihapus");
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Fitur "Ingat Saya" telah dinonaktifkan'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print("[MainScreen] Error clearing Remember Me: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  // --- FUNGSI HELPER BARU (DARI SNIPPET): CEK STATUS REMEMBER ME ---
+  Future<bool> _checkRememberMeStatus() async {
+    try {
+      final userBox = Hive.box('users');
+      return userBox.get('rememberMeEnabled', defaultValue: false) as bool;
+    } catch (e) {
+      return false;
+    }
+  }
   
-  // --- FUNGSI NOTIFIKASI ---
+  // --- FUNGSI NOTIFIKASI (TETAP SAMA) ---
   Future<void> _initializeNotifications() async {
     try {
       await _notificationService.initialize();
@@ -346,14 +456,46 @@ class _MainScreenState extends State<MainScreen> {
                 Navigator.pushNamed(context, '/feedback');
               },
             ),
+
+            // --- TAMBAHAN BARU DARI SNIPPET ---
             const Divider(),
+            FutureBuilder<bool>(
+              future: _checkRememberMeStatus(),
+              builder: (context, snapshot) {
+                final rememberMeEnabled = snapshot.data ?? false;
+                
+                if (!rememberMeEnabled) {
+                  return const SizedBox.shrink(); // Sembunyikan jika tidak aktif
+                }
+                
+                return ListTile(
+                  leading: Icon(
+                    Icons.phonelink_erase_outlined,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: const Text('Hapus "Ingat Saya"'),
+                  subtitle: const Text(
+                    'Perlu login ulang nanti',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _clearRememberMe();
+                  },
+                );
+              },
+            ),
+            // --- AKHIR TAMBAHAN BARU ---
+
+            const Divider(), // Ini adalah Divider yang sudah ada sebelumnya
+            
             // Menu: Logout
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.redAccent),
               title: const Text('Keluar Akun', style: TextStyle(color: Colors.redAccent)),
               onTap: () {
                 Navigator.pop(context);
-                _logout();
+                _logout(); // Memanggil fungsi _logout baru yang sudah di-update
               },
             ),
           ],
