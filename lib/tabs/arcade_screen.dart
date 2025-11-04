@@ -4,9 +4,9 @@
  *
  * UPDATE:
  * - Menambahkan fitur Daily Mission (di dialog AppBar).
- * - Menambahkan fitur Gyro Control.
- * - (FINAL) Memindahkan pengaturan Gyro/Button ke dialog AppBar (ikon settings).
- * - (FINAL) Memperbaiki logika sensitivitas gyro (nilai tinggi = lebih responsif).
+ * - Menambahkan fitur Gyro Control (di dialog settings AppBar).
+ * - Memperbaiki logika sensitivitas gyro (nilai tinggi = lebih responsif).
+ * - (FIX) Menghapus state '_currentRank' yang tidak terpakai untuk menghilangkan warning.
  */
 
 import 'dart:async'; // Untuk Timer
@@ -57,10 +57,10 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
   final String _crashSoundPath = 'audio/crash.mp3';
   final String _musicPath = 'audio/audi_sound.mp3';
 
-  // --- STATE DAILY MISSION ---
+  // --- STATE DAILY MISSION (FIXED) ---
   int _todayHighScore = 0;
   int _allTimeHighScore = 0;
-  String _currentRank = "Rookie";
+  // String _currentRank = "Rookie"; // <-- HAPUS BARIS INI (Sesuai Solusi 1)
   String _lastPlayedDate = "";
 
   final Map<String, int> _rankThresholds = {
@@ -104,6 +104,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
 
   // --- FUNGSI LOAD/SAVE DATA (DAILY MISSION) ---
 
+  // _loadGameData() - FIXED
   Future<void> _loadGameData() async {
     try {
       final userBox = Hive.box('users');
@@ -124,12 +125,11 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
               _todayHighScore = userData['arcadeDailyScore'] ?? 0;
             }
             
-            _currentRank = _calculateRank(_todayHighScore);
+            // HAPUS: _currentRank = _calculateRank(_todayHighScore);
 
             // Muat juga setelan kontrol
             _isGyroControl = userData['arcadeUseGyro'] ?? false;
             _gyroSensitivity = (userData['arcadeGyroSens'] as num? ?? 15.0).toDouble();
-
           });
         }
       }
@@ -146,6 +146,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     return rank;
   }
 
+  // _saveGameData() - FIXED
   Future<void> _saveGameData(int finalScore) async {
     try {
       final userBox = Hive.box('users');
@@ -177,7 +178,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         await userBox.put(currentUserEmail, userData);
         
         setState(() {
-          _currentRank = _calculateRank(_todayHighScore);
+          // HAPUS: _currentRank = _calculateRank(_todayHighScore);
           _lastPlayedDate = today;
         });
       }
@@ -188,7 +189,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
   
   // Fungsi untuk menyimpan HANYA pengaturan
   Future<void> _saveControlSettings() async {
-     try {
+      try {
       final userBox = Hive.box('users');
       final currentUserEmail = userBox.get('currentUserEmail');
       
@@ -200,9 +201,9 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         
         await userBox.put(currentUserEmail, userData);
       }
-     } catch (e) {
-       print('[Arcade] Error saving control settings: $e');
-     }
+      } catch (e) {
+        print('[Arcade] Error saving control settings: $e');
+      }
   }
 
   // --- FUNGSI KONTROL GAME & GYRO ---
@@ -220,9 +221,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
         double tilt = event.x - _centerCalibration;
         
         // --- LOGIKA SENSITIVITAS DIPERBAIKI ---
-        // Nilai _gyroSensitivity: 5 (Lambat) -> 30 (Cepat)
-        // Kita map ke divider: 30 (Lambat) -> 5 (Cepat)
-        double maxDivider = 35.0; // 35 - 5 = 30 (lambat), 35 - 30 = 5 (cepat)
+        double maxDivider = 35.0; 
         double divider = maxDivider - _gyroSensitivity;
         double movement = (tilt / divider).clamp(-1.0, 1.0);
         // --- AKHIR PERBAIKAN ---
@@ -461,7 +460,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
             onPressed: _showDailyMissionDialog,
             tooltip: 'Lihat Misi Harian',
           ),
-          // --- BARU: Tombol Settings Kontrol ---
+          // Tombol Settings Kontrol
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             onPressed: _showControlSettingsDialog, // Panggil dialog settings
@@ -476,7 +475,6 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
       ),
       body: Column(
         children: [
-          // --- KARTU KONTROL DIHAPUS DARI SINI ---
           
           // 1. Tampilan Skor
           Container(
@@ -695,7 +693,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
             ),
           
           if (_gameStatus == GameStatus.gameOver)
-             const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
           // Tampilkan info mode hanya saat 'ready'
           if (_gameStatus == GameStatus.ready) ...[
@@ -786,6 +784,7 @@ class _ArcadeScreenState extends State<ArcadeScreen> {
     int nextThreshold = 1000;
     bool isMaxRank = false;
     
+    // Gunakan _calculateRank untuk mendapatkan rank terbaru
     final currentRank = _calculateRank(_todayHighScore);
     
     _rankThresholds.forEach((key, value) {
