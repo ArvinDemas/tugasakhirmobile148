@@ -13,12 +13,12 @@
 import 'package:flutter/material.dart';
 
 // Import halaman-halaman untuk setiap tab
-import '../tabs/home_screen.dart';       // Index 0
-import '../tabs/news_screen.dart';      // Index 1
-import '../tabs/store_screen.dart';      // Index 2
-import '../tabs/arcade_screen.dart';      // Index 3
+import '2_home/home_screen.dart';       // Index 0
+import '3_news/news_screen.dart';      // Index 1
+import '4_store/store_screen.dart';      // Index 2
+import '5_arcade/arcade_screen.dart';      // Index 3
 // Import halaman ProfileScreen untuk diakses DARI drawer
-import '../tabs/profile_screen.dart'; // Pastikan path ini benar
+import '6_profile/profile_screen.dart'; // Pastikan path ini benar
 
 // --- Import yang Dibutuhkan untuk Drawer ---
 import 'dart:io';

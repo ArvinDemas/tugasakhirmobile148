@@ -17,7 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart'; // Paket untuk carousel gambar
 import 'package:intl/intl.dart'; // Paket untuk format tanggal dan waktu
 import 'dart:async'; // Dibutuhkan untuk Timer (update jam & countdown)
-import '../../services/api_service.dart'; // Impor ApiService
+import '../../../services/api_service.dart'; // Impor ApiService
 import 'package:hive_flutter/hive_flutter.dart'; // Impor Hive
 
 class HomeScreen extends StatefulWidget {

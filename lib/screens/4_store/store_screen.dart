@@ -26,7 +26,7 @@ import 'package:hive_flutter/hive_flutter.dart'; // Impor Hive
 import 'package:latlong2/latlong.dart'; // Untuk menerima data dari MapPicker
 
 // Import service API
-import '../../services/exchange_rate_service.dart';
+import '../../../services/exchange_rate_service.dart';
 // Import halaman detail produk (untuk class arguments)
 import 'product_detail_screen.dart'; 
 // (Tidak perlu import MapPickerScreen, kita pakai navigasi nama rute)

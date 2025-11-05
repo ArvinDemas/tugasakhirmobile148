@@ -12,8 +12,8 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/intl.dart';
-import '../tabs/product_detail_screen.dart'; // Import untuk ProductDetailArguments
-import '../services/exchange_rate_service.dart'; // Import untuk rates
+import '../4_store/product_detail_screen.dart'; // Import untuk ProductDetailArguments
+import '../../services/exchange_rate_service.dart'; // Import untuk rates
 
 class BookmarkScreen extends StatefulWidget {
   const BookmarkScreen({super.key});

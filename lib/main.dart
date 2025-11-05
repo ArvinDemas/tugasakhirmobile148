@@ -13,21 +13,21 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 // Import Halaman-halaman
-import 'screens/splash_screen.dart';
-import 'screens/onboarding_screen.dart';
-import 'screens/login_screen.dart';
-import 'screens/register_screen.dart';
+import 'screens/1_auth/splash_screen.dart';
+import 'screens/1_auth/onboarding_screen.dart';
+import 'screens/1_auth/login_screen.dart';
+import 'screens/1_auth/register_screen.dart';
 import 'screens/main_screen.dart'; // Halaman utama (Bottom Nav)
-import 'tabs/profile_screen.dart';
-import 'tabs/product_detail_screen.dart';
+import 'screens/6_profile/profile_screen.dart';
+import 'screens/4_store/product_detail_screen.dart';
 // Import Halaman Checkout
-import 'tabs/checkout_screen.dart';
-import 'tabs/order_success_screen.dart';
-import 'tabs/order_history_screen.dart';
-import 'screens/map_picker_screen.dart';
-import 'screens/news_detail_screen.dart';
-import 'screens/bookmark_screen.dart'; // Import halaman bookmark
-import 'screens/feedback_screen.dart'; // Import halaman feedback
+import 'screens/4_store/checkout_screen.dart';
+import 'screens/4_store/order_success_screen.dart';
+import 'screens/6_profile/order_history_screen.dart';
+import 'screens/4_store/map_picker_screen.dart';
+import 'screens/3_news/news_detail_screen.dart';
+import 'screens/6_profile/bookmark_screen.dart'; // Import halaman bookmark
+import 'screens/6_profile/feedback_screen.dart'; // Import halaman feedback
 import 'services/notification_service.dart'; // Import NotificationService
 import 'services/williams_colors.dart';
 
