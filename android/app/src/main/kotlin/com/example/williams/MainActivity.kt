@@ -1,5 +1,11 @@
 package com.example.williams
 
-import io.flutter.embedding.android.FlutterActivity
+// 1. Hapus import FlutterActivity
+// import io.flutter.embedding.android.FlutterActivity
 
-class MainActivity : FlutterActivity()
+// 2. Tambahkan import FlutterFragmentActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
+
+// 3. Ganti FlutterActivity() menjadi FlutterFragmentActivity()
+class MainActivity: FlutterFragmentActivity() {
+}

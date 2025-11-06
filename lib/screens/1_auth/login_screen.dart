@@ -1,17 +1,14 @@
 /**
  * File: login_screen.dart
- * Deskripsi: Halaman untuk pengguna masuk ke aplikasi menggunakan email dan password.
- * Menggunakan Hive untuk memverifikasi kredensial pengguna.
- * 
- * UPDATE:
- * - Fitur "Remember Me" sudah diaktifkan
- * - Auto-login jika user sebelumnya centang "Remember Me"
+ * Lokasi: lib/screens/login_screen.dart
+ * Deskripsi: Halaman login dengan biometrik (FIXED)
  */
 
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:crypto/crypto.dart' as crypto;
 import 'dart:convert';
+import '../../services/biometric_service.dart'; // FIX: Path yang benar
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -27,15 +24,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isPasswordVisible = false;
   bool _isLoading = false;
-  // --- TAMBAHKAN STATE UNTUK REMEMBER ME ---
-  bool _rememberMe = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // --- CEK AUTO-LOGIN SAAT HALAMAN DIBUKA ---
-    _checkAutoLogin();
-  }
 
   @override
   void dispose() {
@@ -44,64 +32,78 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // --- FUNGSI BARU: CEK AUTO-LOGIN ---
-  /**
-   * Cek apakah user sebelumnya centang "Remember Me".
-   * Jika ya, langsung navigasi ke home tanpa perlu login lagi.
-   */
-  Future<void> _checkAutoLogin() async {
-    try {
-      final userBox = Hive.box('users');
-      
-      // Cek apakah ada data "rememberMe" yang true
-      final rememberMeEnabled = userBox.get('rememberMeEnabled', defaultValue: false) as bool;
-      
-      if (rememberMeEnabled) {
-        // Ambil email yang tersimpan
-        final savedEmail = userBox.get('rememberedEmail') as String?;
-        
-        if (savedEmail != null) {
-          print('[LoginScreen] Remember Me aktif untuk: $savedEmail');
-          
-          // Set email aktif
-          await userBox.put('currentUserEmail', savedEmail);
-          
-          // Navigasi langsung ke home
-          if (mounted) {
-            // Delay sedikit agar tidak terlalu cepat (UX lebih baik)
-            await Future.delayed(const Duration(milliseconds: 500));
-            Navigator.pushReplacementNamed(context, '/home');
-          }
-          return;
-        }
-      }
-      
-      // Jika tidak ada remember me, isi email terakhir (jika ada)
-      final lastEmail = userBox.get('lastLoginEmail') as String?;
-      if (lastEmail != null && mounted) {
-        setState(() {
-          _emailController.text = lastEmail;
-        });
-      }
-      
-    } catch (e) {
-      print('[LoginScreen] Error checking auto-login: $e');
-    }
-  }
-
-  // --- FUNGSI UNTUK HASHING PASSWORD ---
   String _hashPassword(String password) {
     final bytes = utf8.encode(password);
     final digest = crypto.sha256.convert(bytes);
     return digest.toString();
   }
 
-  // --- FUNGSI UNTUK PROSES LOGIN (UPDATE) ---
   Future<void> _loginUser() async {
+    // 1. Validasi form
     if (!_formKey.currentState!.validate()) {
       return;
     }
 
+    // --- CEK BIOMETRIK ---
+    print('[LoginScreen] ===== MULAI CEK BIOMETRIK =====');
+    
+    try {
+      final biometricEnabled = await BiometricService.isEnabled();
+      print('[LoginScreen] Biometrik enabled: $biometricEnabled');
+      
+      if (biometricEnabled) {
+        print('[LoginScreen] Biometrik AKTIF, meminta autentikasi...');
+        
+        // Tampilkan dialog loading
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => const Center(
+              child: CircularProgressIndicator(),
+            ),
+          );
+        }
+        
+        final bool authenticated = await BiometricService.authenticate(
+          reason: 'Verifikasi untuk login ke Williams Racing',
+          allowSkip: true,
+        );
+        
+        // Tutup dialog loading
+        if (mounted) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+        
+        print('[LoginScreen] Hasil autentikasi: $authenticated');
+        
+        if (!authenticated) {
+          print('[LoginScreen] Autentikasi GAGAL');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Autentikasi biometrik gagal. Coba lagi atau gunakan password.'),
+                backgroundColor: Colors.orangeAccent,
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+          return;
+        }
+        
+        print('[LoginScreen] Autentikasi BERHASIL');
+      } else {
+        print('[LoginScreen] Biometrik TIDAK AKTIF, skip autentikasi');
+      }
+    } catch (e) {
+      print('[LoginScreen] ERROR saat cek biometrik: $e');
+      // Lanjut ke login password jika error
+    }
+    
+    print('[LoginScreen] ===== LANJUT KE LOGIN PASSWORD =====');
+    // --- AKHIR CEK BIOMETRIK ---
+
+    // 2. Set loading
     if (mounted) {
       setState(() => _isLoading = true);
     }
@@ -121,34 +123,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
         final storedHash = userData['password_hash'] as String?;
         final enteredHash = _hashPassword(password);
-        print('[LoginScreen] Hash password dimasukkan: $enteredHash');
-        print('[LoginScreen] Hash tersimpan di Hive : $storedHash');
 
         if (storedHash != null && storedHash == enteredHash) {
-          // --- LOGIN BERHASIL ---
           print('[LoginScreen] PASSWORD COCOK! Login berhasil.');
 
-          // Simpan email user aktif
           await userBox.put('currentUserEmail', email);
           print('[LoginScreen] Email user aktif disimpan: $email');
-          
-          // --- PROSES REMEMBER ME ---
-          if (_rememberMe) {
-            // Simpan status remember me
-            await userBox.put('rememberMeEnabled', true);
-            await userBox.put('rememberedEmail', email);
-            print('[LoginScreen] Remember Me diaktifkan untuk: $email');
-          } else {
-            // Hapus remember me jika tidak dicentang
-            await userBox.put('rememberMeEnabled', false);
-            await userBox.delete('rememberedEmail');
-            print('[LoginScreen] Remember Me dinonaktifkan');
-          }
-          
-          // Simpan email terakhir login (untuk auto-fill)
-          await userBox.put('lastLoginEmail', email);
 
-          // Tampilkan pesan sukses
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -159,13 +140,11 @@ class _LoginScreenState extends State<LoginScreen> {
             await Future.delayed(const Duration(milliseconds: 500));
           }
 
-          // Navigasi ke Halaman Utama
           if (mounted) {
             Navigator.pushReplacementNamed(context, '/home');
           }
 
         } else {
-          // --- PASSWORD SALAH ---
           print('[LoginScreen] PASSWORD SALAH!');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -177,7 +156,6 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         }
       } else {
-        // --- USER TIDAK DITEMUKAN ---
         print('[LoginScreen] User TIDAK ditemukan dengan email: $email');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -205,9 +183,10 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // --- UI WIDGET BUILD METHOD ---
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -217,40 +196,49 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // --- BAGIAN LOGO & JUDUL ---
+                // Logo
                 Image.asset(
                   'assets/images/F1_logo.png',
                   height: 80,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.sports_motorsports, size: 80, color: Colors.grey),
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.sports_motorsports,
+                    size: 80,
+                    color: Colors.grey,
+                  ),
                 ),
                 const SizedBox(height: 16),
+                
                 Text(
                   'Williams Racing',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onBackground,
+                    color: theme.colorScheme.onSurface,
                     fontSize: 28,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 8),
+                
                 Text(
                   'Masuk ke Akun Williams Anda',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                    color: theme.colorScheme.onSurface.withOpacity(0.8),
                     fontSize: 16,
                   ),
                 ),
                 const SizedBox(height: 40),
 
-                // --- INPUT EMAIL ---
+                // Input Email
                 TextFormField(
                   controller: _emailController,
-                  decoration: _buildInputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Masukkan email Anda',
-                    prefixIcon: Icons.email_outlined,
+                    prefixIcon: Icon(
+                      Icons.email_outlined,
+                      color: theme.colorScheme.outline,
+                      size: 20,
+                    ),
                   ),
                   keyboardType: TextInputType.emailAddress,
                   validator: (value) {
@@ -265,16 +253,22 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // --- INPUT PASSWORD ---
+                // Input Password
                 TextFormField(
                   controller: _passwordController,
-                  decoration: _buildInputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Masukkan password Anda',
-                    prefixIcon: Icons.lock_outline,
+                    prefixIcon: Icon(
+                      Icons.lock_outline,
+                      color: theme.colorScheme.outline,
+                      size: 20,
+                    ),
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _isPasswordVisible ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                        color: Theme.of(context).inputDecorationTheme.suffixIconColor,
+                        _isPasswordVisible
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        color: theme.inputDecorationTheme.suffixIconColor,
                       ),
                       onPressed: () {
                         setState(() {
@@ -293,43 +287,33 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // --- OPSI LANJUTAN (REMEMBER ME & FORGOT PASSWORD) ---
+                // Remember Me & Forgot Password
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // --- REMEMBER ME (SUDAH AKTIF) ---
                     Row(
                       children: [
                         Checkbox(
-                          value: _rememberMe,
+                          value: false,
                           onChanged: (bool? value) {
-                            setState(() {
-                              _rememberMe = value ?? false;
-                            });
-                            print('[LoginScreen] Remember Me: $_rememberMe');
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Fitur "Remember Me" belum diimplementasikan.'),
+                              ),
+                            );
                           },
                         ),
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _rememberMe = !_rememberMe;
-                            });
-                          },
-                          child: Text(
-                            'Ingat Saya',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
-                              fontSize: 13,
-                            ),
+                        Text(
+                          'Ingat Saya',
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurface.withOpacity(0.8),
+                            fontSize: 13,
                           ),
                         ),
                       ],
                     ),
-                    
-                    // --- LUPA PASSWORD ---
                     TextButton(
                       onPressed: () {
-                        // TODO: Implementasi halaman/logika lupa password
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text('Fitur "Lupa Password" belum diimplementasikan.'),
@@ -340,6 +324,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         'Lupa Password?',
                         style: TextStyle(
                           fontSize: 13,
+                          color: theme.colorScheme.primary,
                         ),
                       ),
                     ),
@@ -347,7 +332,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 30),
 
-                // --- TOMBOL LOGIN ---
+                // Tombol Login
                 ElevatedButton(
                   onPressed: _isLoading ? null : _loginUser,
                   child: _isLoading
@@ -356,30 +341,43 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF012169)),
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                           ),
                         )
                       : const Text('Log In'),
                 ),
                 const SizedBox(height: 20),
 
-                // --- DIVIDER "ATAU" ---
+                // Divider
                 Row(
                   children: [
-                    const Expanded(child: Divider(thickness: 0.5)),
+                    Expanded(
+                      child: Divider(
+                        thickness: 0.5,
+                        color: theme.colorScheme.outline.withOpacity(0.5),
+                      ),
+                    ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12.0),
                       child: Text(
                         'ATAU',
-                        style: TextStyle(color: Theme.of(context).colorScheme.outline, fontSize: 12),
+                        style: TextStyle(
+                          color: theme.colorScheme.outline,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
-                    const Expanded(child: Divider(thickness: 0.5)),
+                    Expanded(
+                      child: Divider(
+                        thickness: 0.5,
+                        color: theme.colorScheme.outline.withOpacity(0.5),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
 
-                // --- TOMBOL KE HALAMAN REGISTRASI ---
+                // Tombol Register
                 OutlinedButton(
                   onPressed: () {
                     Navigator.pushNamed(context, '/register');
@@ -391,18 +389,6 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  // --- HELPER UNTUK MEMBUAT INPUT DECORATION ---
-  InputDecoration _buildInputDecoration({required String hintText, IconData? prefixIcon, Widget? suffixIcon}) {
-    final inputTheme = Theme.of(context).inputDecorationTheme;
-    return InputDecoration(
-      hintText: hintText,
-      prefixIcon: prefixIcon != null
-          ? Icon(prefixIcon, color: inputTheme.hintStyle?.color, size: 20)
-          : null,
-      suffixIcon: suffixIcon,
     );
   }
 }

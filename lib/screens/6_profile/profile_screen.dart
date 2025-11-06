@@ -1,12 +1,12 @@
 /**
  * File: profile_screen.dart
- * Deskripsi: Halaman untuk "Edit Profile".
+ * Deskripsi: Halaman profile dengan Side Navigation Drawer & Toggle Biometrik
  * * UPDATE:
- * - Ini BUKAN lagi halaman tab. Ini adalah halaman yang di-push (dibuka)
- * dari Drawer di main_screen.dart.
- * - Menghapus semua logika Drawer, AppBar kustom, dan notifikasi
- * (sudah pindah ke main_screen.dart).
- * - Hanya berisi logika untuk mengedit profil (nama, tgl lahir, foto).
+ * - Disesuaikan untuk menggunakan BiometricService (Singleton) yang baru.
+ * - Menggunakan BiometricService() (factory instance) untuk memanggil
+ * metode non-statis (isDeviceSupported, isBiometricEnrolled, getBiometricTypeName).
+ * - Tetap menggunakan BiometricService (static) untuk memanggil
+ * metode statis (isEnabled, setEnabled, authenticate).
  */
 
 import 'dart:io';
@@ -16,7 +16,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:intl/intl.dart';
-// Import NotificationService DIHAPUS, karena sudah pindah ke MainScreen
+import '../../services/notification_service.dart';
+import '../../services/biometric_service.dart'; // IMPORT BIOMETRIC SERVICE
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -28,17 +29,28 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
+  final NotificationService _notificationService = NotificationService();
+
+  // Buat instance service (karena service baru Anda pakai singleton)
+  final BiometricService _biometricService = BiometricService();
 
   String? _currentUserEmail;
   String _username = "Pengguna";
   String? _dobString;
   String? _profileImagePath;
   bool _isLoading = true;
+  
+  // STATE BIOMETRIK
+  bool _biometricEnabled = false;
+  bool _biometricAvailable = false;
+  String _biometricType = 'Biometrik';
 
   @override
   void initState() {
     super.initState();
+    _initializeNotifications();
     _loadUserProfile();
+    _checkBiometric(); // Panggil cek biometrik
   }
   
   @override
@@ -47,7 +59,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  // --- Load User Profile (Tetap ada, diperlukan untuk halaman ini) ---
+  // Inisialisasi Notifikasi
+  Future<void> _initializeNotifications() async {
+    try {
+      await _notificationService.initialize();
+      await _notificationService.requestPermissions();
+      print('[ProfileScreen] Notification service initialized');
+    } catch (e) {
+      print('[ProfileScreen] Error initializing notifications: $e');
+    }
+  }
+
+  // Load User Profile
   Future<void> _loadUserProfile() async {
     if (mounted) setState(() => _isLoading = true);
     try {
@@ -82,7 +105,96 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- Update User Data (Tetap ada) ---
+  // CEK BIOMETRIK (FIXED: Menggunakan instance _biometricService dan metode statis)
+  Future<void> _checkBiometric() async {
+    try {
+      // Panggil metode INSTANCE menggunakan _biometricService
+      final available = await _biometricService.isDeviceSupported();
+      final enrolled = await _biometricService.isBiometricEnrolled();
+      final typeName = await _biometricService.getBiometricTypeName();
+      
+      // Panggil metode STATIS menggunakan BiometricService
+      final enabled = await BiometricService.isEnabled();
+      
+      print('[ProfileScreen] Biometric check:');
+      print('  Available: $available');
+      print('  Enrolled: $enrolled');
+      print('  Enabled: $enabled');
+      print('  Type: $typeName');
+      
+      if (mounted) {
+        setState(() {
+          _biometricAvailable = available && enrolled;
+          _biometricEnabled = enabled;
+          _biometricType = typeName;
+        });
+      }
+    } catch (e) {
+      print('[ProfileScreen] Error checking biometric: $e');
+    }
+  }
+
+  // TOGGLE BIOMETRIK (FIXED: Menggunakan metode statis)
+  Future<void> _toggleBiometric(bool value) async {
+    if (!_biometricAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Biometrik tidak tersedia atau belum terdaftar di perangkat ini'),
+          backgroundColor: Colors.orangeAccent,
+        ),
+      );
+      return;
+    }
+    
+    if (value) {
+      // AKTIFKAN: Test autentikasi dulu (Panggil metode STATIS)
+      final authenticated = await BiometricService.authenticate(
+        reason: 'Verifikasi untuk mengaktifkan $_biometricType',
+        allowSkip: false, // Harus berhasil untuk aktifkan
+      );
+      
+      if (authenticated) {
+        // Panggil metode STATIS
+        await BiometricService.setEnabled(true);
+        // Panggil _checkBiometric untuk refresh state
+        await _checkBiometric(); 
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$_biometricType berhasil diaktifkan'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Autentikasi gagal, biometrik tidak diaktifkan'),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+    } else {
+      // NONAKTIFKAN (Panggil metode STATIS)
+      await BiometricService.setEnabled(false);
+      // Panggil _checkBiometric untuk refresh state
+      await _checkBiometric();
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$_biometricType dinonaktifkan'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
+  }
+
+  // Update User Data
   Future<void> _updateUserData(String key, dynamic value) async {
     if (_currentUserEmail == null) return;
     try {
@@ -90,7 +202,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final Map<dynamic, dynamic> userData = Map.from(userBox.get(_currentUserEmail) ?? {});
       userData[key] = value;
       await userBox.put(_currentUserEmail!, userData);
-      _loadUserProfile(); // Muat ulang data untuk tampilan
+      _loadUserProfile();
     } catch (e) {
       print("[ProfileScreen] Error updating user data: $e");
       if (mounted) {
@@ -101,7 +213,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- Dialog Edit Username (Tetap ada) ---
+  // Dialog Edit Username
   void _showEditUsernameDialog() {
     _usernameController.text = _username;
     showDialog(
@@ -137,7 +249,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- Date Picker (Tetap ada) ---
+  // Date Picker
   Future<void> _selectDateOfBirth() async {
     final DateTime firstDate = DateTime.now().subtract(const Duration(days: 365 * 100));
     final DateTime lastDate = DateTime.now();
@@ -154,7 +266,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- Image Picker (Tetap ada) ---
+  // Image Picker
   Future<void> _pickImage() async {
      final ImagePicker picker = ImagePicker();
     final XFile? image = await showModalBottomSheet<XFile?>(
@@ -192,7 +304,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // --- UI BUILD METHOD (TANPA DRAWER) ---
+  // Logout
+   Future<void> _logout() async {
+      try {
+         final userBox = Hive.box('users');
+         await userBox.delete('currentUserEmail');
+         if (mounted) {
+            Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+         }
+      } catch (e) {
+         print("[ProfileScreen] Error logout: $e");
+         if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Gagal logout: $e'), backgroundColor: Colors.redAccent)
+            );
+         }
+      }
+   }
+
+  // Test Notifikasi
+  Future<void> _testInstantNotification() async {
+    await _notificationService.showInstantNotification(
+      id: 999,
+      title: '🏁 Test Notifikasi',
+      body: 'Ini adalah notifikasi test dari Williams Racing App!',
+      payload: 'test',
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notifikasi instant dikirim!'), backgroundColor: Colors.green)
+      );
+    }
+  }
+
+  Future<void> _testDelayedNotification() async {
+    await _notificationService.scheduleStorePromotion();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Notifikasi promosi store dijadwalkan dalam 5 detik!'),
+          backgroundColor: Colors.green,
+        )
+      );
+    }
+  }
+
+  // UI BUILD METHOD (dengan Drawer)
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -202,14 +359,129 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final theme = Theme.of(context);
     bool profileImageExists = _profileImagePath != null && File(_profileImagePath!).existsSync();
 
-    // Halaman ini sekarang punya Scaffold sendiri (karena di-push)
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Edit Profile'),
+        title: const Text('Profil Saya'),
         centerTitle: true,
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
       ),
       
-      // --- BODY: Konten Profile Utama (Tetap sama) ---
+      // DRAWER MENU
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    theme.colorScheme.primary,
+                    theme.colorScheme.primary.withOpacity(0.7),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  CircleAvatar(
+                    radius: 35,
+                    backgroundColor: Colors.white,
+                    backgroundImage: profileImageExists
+                        ? FileImage(File(_profileImagePath!)) as ImageProvider
+                        : null,
+                    child: !profileImageExists
+                        ? const Icon(Icons.person, size: 40, color: Colors.grey)
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _username,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    _currentUserEmail ?? '',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            ListTile(
+              leading: Icon(Icons.person_outline, color: theme.colorScheme.primary),
+              title: const Text('Edit Profile'),
+              onTap: () {
+                Navigator.pop(context);
+              },
+            ),
+            
+            ListTile(
+              leading: Icon(Icons.receipt_long_outlined, color: theme.colorScheme.primary),
+              title: const Text('Riwayat Pesanan'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/order-history');
+              },
+            ),
+            
+            ListTile(
+              leading: Icon(Icons.bookmark_outline, color: theme.colorScheme.primary),
+              title: const Text('Produk Favorit'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/bookmark');
+              },
+            ),
+            
+            const Divider(),
+            
+            ListTile(
+              leading: Icon(Icons.notifications_active_outlined, color: theme.colorScheme.primary),
+              title: const Text('Test Notifikasi'),
+              onTap: () {
+                Navigator.pop(context);
+                _showNotificationTestDialog();
+              },
+            ),
+            
+            ListTile(
+              leading: Icon(Icons.feedback_outlined, color: theme.colorScheme.primary),
+              title: const Text('Kesan & Pesan'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, '/feedback');
+              },
+            ),
+            
+            const Divider(),
+            
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.redAccent),
+              title: const Text('Keluar Akun', style: TextStyle(color: Colors.redAccent)),
+              onTap: () {
+                Navigator.pop(context);
+                _logout();
+              },
+            ),
+          ],
+        ),
+      ),
+      
+      // BODY: Konten Profile Utama
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -223,7 +495,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                  children: [
                     CircleAvatar(
                       radius: 60,
-                      backgroundColor: theme.colorScheme.surfaceVariant,
+                      backgroundColor: theme.colorScheme.surfaceVariant, // Menggunakan surfaceVariant
                       backgroundImage: profileImageExists
                           ? FileImage(File(_profileImagePath!)) as ImageProvider
                           : null,
@@ -270,13 +542,112 @@ class _ProfileScreenState extends State<ProfileScreen> {
                label: 'Email',
                value: _currentUserEmail ?? 'Tidak tersedia',
              ),
+             
+            const SizedBox(height: 24),
+            
+            // CARD BIOMETRIK (BARU - HANYA MUNCUL JIKA AVAILABLE)
+            if (_biometricAvailable)
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: ListTile(
+                  leading: Icon(
+                    Icons.fingerprint, // Ikon generik
+                    color: theme.colorScheme.primary,
+                    size: 28,
+                  ),
+                  title: Text(
+                    _biometricType, // Menampilkan 'Sidik Jari' atau 'Face ID'
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  subtitle: Text(
+                    _biometricEnabled
+                        ? 'Aktif - Login dengan $_biometricType'
+                        : 'Nonaktif - Login dengan password saja',
+                    style: TextStyle(
+                      color: theme.colorScheme.outline,
+                      fontSize: 12,
+                    ),
+                  ),
+                  trailing: Switch(
+                    value: _biometricEnabled,
+                    onChanged: _toggleBiometric, // Panggil fungsi toggle
+                    activeColor: theme.colorScheme.primary,
+                  ),
+                ),
+              ),
+            
+            // Hint untuk drawer
+            Card(
+              color: theme.colorScheme.surfaceVariant.withOpacity(0.5), // Menggunakan surfaceVariant
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: theme.colorScheme.primary, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Buka menu di pojok kiri atas untuk fitur lainnya',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // --- Helper Widget Info Tile (Tetap sama) ---
+  // Dialog Test Notifikasi
+  void _showNotificationTestDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Test Notifikasi'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Pilih jenis notifikasi untuk ditest:'),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _testInstantNotification();
+              },
+              icon: const Icon(Icons.flash_on),
+              label: const Text('Notifikasi Instant'),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(context);
+                _testDelayedNotification();
+              },
+              icon: const Icon(Icons.schedule),
+              label: const Text('Notifikasi Delay 5 Detik'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tutup'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Helper Widget Info Tile
   Widget _buildInfoTile({
     required IconData icon,
     required String label,
