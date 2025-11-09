@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class GeminiService {
-  static const String _apiKey = "AIzaSyD0REEJwBlHbh6ALiciDpwW1yH2c9neJCQ";
+  static const String _apiKey = "";
   
   // MODEL YANG BENAR sesuai hasil curl Anda
   static const String _model = 'gemini-2.5-flash';
