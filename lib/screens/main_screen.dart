@@ -9,14 +9,21 @@
  * - Menginisialisasi _pages di initState agar bisa
  * meneruskan fungsi 'onProfilePressed' ke HomeScreen.
  * - Fungsi ini akan memicu _scaffoldKey untuk membuka drawer.
+ *
+ * UPDATE (AI):
+ * - Menambahkan AI Chat sebagai TAB ke-5 di Bottom Nav Bar
+ * - Menghapus AI Chat dari Drawer
  */
 import 'package:flutter/material.dart';
 
 // Import halaman-halaman untuk setiap tab
-import '2_home/home_screen.dart';       // Index 0
-import '3_news/news_screen.dart';      // Index 1
-import '4_store/store_screen.dart';      // Index 2
-import '5_arcade/arcade_screen.dart';      // Index 3
+import '2_home/home_screen.dart'; // Index 0
+import '3_news/news_screen.dart'; // Index 1
+import '4_store/store_screen.dart'; // Index 2
+import '5_arcade/arcade_screen.dart'; // Index 3
+// --- IMPORT BARU UNTUK AI CHAT ---
+import '7_ai/ai_chat_screen.dart'; // Index 4
+
 // Import halaman ProfileScreen untuk diakses DARI drawer
 import '6_profile/profile_screen.dart'; // Pastikan path ini benar
 
@@ -26,7 +33,6 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import '../../services/notification_service.dart'; // Import NotificationService
 // --- (Selesai Import Drawer) ---
-
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -39,7 +45,7 @@ class _MainScreenState extends State<MainScreen> {
   // Kunci untuk mengontrol Scaffold (terutama untuk membuka Drawer)
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  int _selectedIndex = 0; // Tab yang sedang aktif (0-3)
+  int _selectedIndex = 0; // Tab yang sedang aktif (sekarang 0-4)
 
   // --- DAFTAR HALAMAN (TIDAK LAGI const) ---
   late final List<Widget> _pages;
@@ -65,13 +71,15 @@ class _MainScreenState extends State<MainScreen> {
         onProfilePressed: () {
           // Panggil fungsi untuk memuat ulang data user di drawer
           // sebelum membukanya, agar selalu update
-          _loadUserProfileForDrawer(); 
+          _loadUserProfileForDrawer();
           _scaffoldKey.currentState?.openDrawer();
         },
-      ),      // Index 0: Home
-      const NewsScreen(),      // Index 1: News
-      const StoreScreen(),     // Index 2: Store
-      const ArcadeScreen(),    // Index 3: Arcade
+      ), // Index 0: Home
+      const NewsScreen(), // Index 1: News
+      const StoreScreen(), // Index 2: Store
+      const ArcadeScreen(), // Index 3: Arcade
+      // --- HALAMAN AI DITAMBAHKAN DI SINI ---
+      const AiChatScreen(), // Index 4: AI Chat
     ];
   }
 
@@ -79,30 +87,30 @@ class _MainScreenState extends State<MainScreen> {
   Future<void> _loadUserProfileForDrawer() async {
     // Hanya setState jika sedang loading atau jika data berubah
     if (!_isLoadingDrawer) {
-       // Cek data cepat tanpa loading, jika perlu
-       try {
-         final userBox = Hive.box('users');
-         _currentUserEmail = userBox.get('currentUserEmail');
-         if (_currentUserEmail != null) {
-           final userData = userBox.get(_currentUserEmail) as Map?;
-           if (userData != null) {
-             final newUsername = userData['username'] ?? "Pengguna";
-             final newImagePath = userData['profileImagePath'] as String?;
-             // Hanya update jika ada perubahan
-             if (newUsername != _username || newImagePath != _profileImagePath) {
-               if (mounted) {
-                 setState(() {
-                   _username = newUsername;
-                   _profileImagePath = newImagePath;
-                 });
-               }
-             }
-           }
-         }
-       } catch (e) {
-         print("[MainScreen] Quick load profile error: $e");
-       }
-       return; // Jangan tampilkan loading spinner jika sudah dimuat
+      // Cek data cepat tanpa loading, jika perlu
+      try {
+        final userBox = Hive.box('users');
+        _currentUserEmail = userBox.get('currentUserEmail');
+        if (_currentUserEmail != null) {
+          final userData = userBox.get(_currentUserEmail) as Map?;
+          if (userData != null) {
+            final newUsername = userData['username'] ?? "Pengguna";
+            final newImagePath = userData['profileImagePath'] as String?;
+            // Hanya update jika ada perubahan
+            if (newUsername != _username || newImagePath != _profileImagePath) {
+              if (mounted) {
+                setState(() {
+                  _username = newUsername;
+                  _profileImagePath = newImagePath;
+                });
+              }
+            }
+          }
+        }
+      } catch (e) {
+        print("[MainScreen] Quick load profile error: $e");
+      }
+      return; // Jangan tampilkan loading spinner jika sudah dimuat
     }
 
     if (mounted) setState(() => _isLoadingDrawer = true);
@@ -155,16 +163,16 @@ class _MainScreenState extends State<MainScreen> {
 
     try {
       final userBox = Hive.box('users');
-      
+
       // Hapus email user aktif
       await userBox.delete('currentUserEmail');
-      
+
       // PENTING: Hapus status Remember Me
       await userBox.put('rememberMeEnabled', false);
       await userBox.delete('rememberedEmail');
-      
+
       print("[MainScreen] Logout berhasil, Remember Me dihapus");
-      
+
       if (mounted) {
         // Tampilkan pesan sukses
         ScaffoldMessenger.of(context).showSnackBar(
@@ -173,7 +181,7 @@ class _MainScreenState extends State<MainScreen> {
             backgroundColor: Colors.green,
           ),
         );
-        
+
         // Navigasi ke login dan hapus semua history
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }
@@ -216,13 +224,13 @@ class _MainScreenState extends State<MainScreen> {
 
     try {
       final userBox = Hive.box('users');
-      
+
       // Hapus status Remember Me (tetap login di session ini)
       await userBox.put('rememberMeEnabled', false);
       await userBox.delete('rememberedEmail');
-      
+
       print("[MainScreen] Remember Me berhasil dihapus");
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -253,7 +261,7 @@ class _MainScreenState extends State<MainScreen> {
       return false;
     }
   }
-  
+
   // --- FUNGSI NOTIFIKASI (TETAP SAMA) ---
   Future<void> _initializeNotifications() async {
     try {
@@ -272,19 +280,19 @@ class _MainScreenState extends State<MainScreen> {
       payload: 'test',
     );
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Notifikasi instant dikirim!'), backgroundColor: Colors.green));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Notifikasi instant dikirim!'),
+          backgroundColor: Colors.green));
     }
   }
 
   Future<void> _testDelayedNotification() async {
     await _notificationService.scheduleStorePromotion();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Notifikasi promosi store dijadwalkan dalam 5 detik!'),
-            backgroundColor: Colors.green,
-          ));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Notifikasi promosi store dijadwalkan dalam 5 detik!'),
+        backgroundColor: Colors.green,
+      ));
     }
   }
 
@@ -328,7 +336,6 @@ class _MainScreenState extends State<MainScreen> {
   }
   // --- (Selesai Logika Drawer) ---
 
-
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
@@ -338,17 +345,18 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    bool profileImageExists = _profileImagePath != null && File(_profileImagePath!).existsSync();
+    bool profileImageExists =
+        _profileImagePath != null && File(_profileImagePath!).existsSync();
 
     return Scaffold(
       // Tambahkan key di sini
       key: _scaffoldKey,
-      
+
       // --- TIDAK ADA APPBAR DI SINI ---
 
       body: IndexedStack(
         index: _selectedIndex,
-        children: _pages, // Gunakan _pages yang sudah di-init
+        children: _pages, // Gunakan _pages yang sudah di-init (sekarang 5)
       ),
 
       // --- DRAWER (TETAP DI SINI) ---
@@ -368,43 +376,47 @@ class _MainScreenState extends State<MainScreen> {
                 ),
               ),
               child: _isLoadingDrawer
-                  ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                  ? const Center(
+                      child: CircularProgressIndicator(color: Colors.white))
                   : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  CircleAvatar(
-                    radius: 35,
-                    backgroundColor: Colors.white,
-                    backgroundImage: profileImageExists
-                        ? FileImage(File(_profileImagePath!)) as ImageProvider
-                        : null,
-                    child: !profileImageExists
-                        ? const Icon(Icons.person, size: 40, color: Colors.grey)
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _username,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        CircleAvatar(
+                          radius: 35,
+                          backgroundColor: Colors.white,
+                          backgroundImage: profileImageExists
+                              ? FileImage(File(_profileImagePath!))
+                                  as ImageProvider
+                              : null,
+                          child: !profileImageExists
+                              ? const Icon(Icons.person,
+                                  size: 40, color: Colors.grey)
+                              : null,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _username,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          _currentUserEmail ?? '',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  Text(
-                    _currentUserEmail ?? '',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
             ),
             // Menu: Edit Profile
             ListTile(
-              leading: Icon(Icons.person_outline, color: theme.colorScheme.primary),
+              leading:
+                  Icon(Icons.person_outline, color: theme.colorScheme.primary),
               title: const Text('Edit Profile'),
               onTap: () {
                 Navigator.pop(context); // Tutup drawer
@@ -413,13 +425,14 @@ class _MainScreenState extends State<MainScreen> {
                   // Arahkan ke profile_screen.dart (yang TIDAK punya drawer)
                   MaterialPageRoute(builder: (context) => const ProfileScreen()),
                 )
-                // PENTING: Muat ulang data user saat kembali dari edit profile
-                .then((_) => _loadUserProfileForDrawer());
+                    // PENTING: Muat ulang data user saat kembali dari edit profile
+                    .then((_) => _loadUserProfileForDrawer());
               },
             ),
             // Menu: Riwayat Pesanan
             ListTile(
-              leading: Icon(Icons.receipt_long_outlined, color: theme.colorScheme.primary),
+              leading: Icon(Icons.receipt_long_outlined,
+                  color: theme.colorScheme.primary),
               title: const Text('Riwayat Pesanan'),
               onTap: () {
                 Navigator.pop(context);
@@ -428,7 +441,8 @@ class _MainScreenState extends State<MainScreen> {
             ),
             // Menu: Bookmark
             ListTile(
-              leading: Icon(Icons.bookmark_outline, color: theme.colorScheme.primary),
+              leading: Icon(Icons.bookmark_outline,
+                  color: theme.colorScheme.primary),
               title: const Text('Produk Favorit'),
               onTap: () {
                 Navigator.pop(context);
@@ -438,7 +452,8 @@ class _MainScreenState extends State<MainScreen> {
             const Divider(),
             // Menu: Test Notifikasi
             ListTile(
-              leading: Icon(Icons.notifications_active_outlined, color: theme.colorScheme.primary),
+              leading: Icon(Icons.notifications_active_outlined,
+                  color: theme.colorScheme.primary),
               title: const Text('Test Notifikasi'),
               onTap: () {
                 Navigator.pop(context);
@@ -447,7 +462,8 @@ class _MainScreenState extends State<MainScreen> {
             ),
             // Menu: Kesan & Pesan
             ListTile(
-              leading: Icon(Icons.feedback_outlined, color: theme.colorScheme.primary),
+              leading: Icon(Icons.feedback_outlined,
+                  color: theme.colorScheme.primary),
               title: const Text('Kesan & Pesan'),
               onTap: () {
                 Navigator.pop(context);
@@ -455,17 +471,19 @@ class _MainScreenState extends State<MainScreen> {
               },
             ),
 
+            // --- MENU AI CHATBOT (DIHAPUS DARI SINI) ---
+
             // --- TAMBAHAN BARU DARI SNIPPET ---
             const Divider(),
             FutureBuilder<bool>(
               future: _checkRememberMeStatus(),
               builder: (context, snapshot) {
                 final rememberMeEnabled = snapshot.data ?? false;
-                
+
                 if (!rememberMeEnabled) {
                   return const SizedBox.shrink(); // Sembunyikan jika tidak aktif
                 }
-                
+
                 return ListTile(
                   leading: Icon(
                     Icons.phonelink_erase_outlined,
@@ -486,11 +504,12 @@ class _MainScreenState extends State<MainScreen> {
             // --- AKHIR TAMBAHAN BARU ---
 
             const Divider(), // Ini adalah Divider yang sudah ada sebelumnya
-            
+
             // Menu: Logout
             ListTile(
               leading: const Icon(Icons.logout, color: Colors.redAccent),
-              title: const Text('Keluar Akun', style: TextStyle(color: Colors.redAccent)),
+              title: const Text('Keluar Akun',
+                  style: TextStyle(color: Colors.redAccent)),
               onTap: () {
                 Navigator.pop(context);
                 _logout(); // Memanggil fungsi _logout baru yang sudah di-update
@@ -501,7 +520,7 @@ class _MainScreenState extends State<MainScreen> {
       ),
       // --- (Selesai Drawer) ---
 
-      // --- BOTTOM NAVIGATION BAR (4 ITEM) ---
+      // --- BOTTOM NAVIGATION BAR (SEKARANG 5 ITEM) ---
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(
@@ -524,9 +543,20 @@ class _MainScreenState extends State<MainScreen> {
             activeIcon: Icon(Icons.gamepad),
             label: 'Arcade',
           ),
+          // --- ITEM BARU UNTUK AI CHAT ---
+          BottomNavigationBarItem(
+            icon: Icon(Icons.smart_toy_outlined),
+            activeIcon: Icon(Icons.smart_toy),
+            label: 'AI Chat',
+          ),
         ],
         currentIndex: _selectedIndex,
-        onTap: _onItemTapped, 
+        onTap: _onItemTapped,
+        // Properti tambahan untuk memastikan style bottom nav bar Anda
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: theme.colorScheme.primary,
+        unselectedItemColor: theme.colorScheme.outline,
+        backgroundColor: theme.colorScheme.surface,
       ),
     );
   }

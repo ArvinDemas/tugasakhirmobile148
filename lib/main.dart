@@ -30,6 +30,7 @@ import 'screens/6_profile/bookmark_screen.dart'; // Import halaman bookmark
 import 'screens/6_profile/feedback_screen.dart'; // Import halaman feedback
 import 'services/notification_service.dart'; // Import NotificationService
 import 'services/williams_colors.dart';
+import 'screens/7_ai/ai_chat_screen.dart';
 
 
 void main() async {
@@ -103,6 +104,7 @@ class WilliamsApp extends StatelessWidget {
         '/news-detail': (context) => const NewsDetailScreen(),
         '/bookmark': (context) => const BookmarkScreen(), // Route bookmark
        '/feedback': (context) => const FeedbackScreen(), // Route feedback
+       '/ai-chat': (context) => const AiChatScreen(),
       },
     ); // Akhir MaterialApp
   }
